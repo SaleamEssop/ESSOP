@@ -29,20 +29,25 @@ These mappings allow the system to load settings, SSH passwords, and container d
 ## 2. Step-by-Step Operations Walkthrough
 
 ### Step 2.1: Registering a Project Folder
-1.  **Add Request**: In the Web UI, the user types a path (e.g. `C:\mycities`) and clicks **Add Project**.
-2.  **API Verification**: The endpoint `POST /api/projects/add` resolves the path, ensures it is a directory (creating it if it does not exist), validates the project name for safe characters, and appends the name and path to `projects.json`.
-3.  **Workspace Isolation**: The console automatically creates a `C:\mycities\snapshots` directory to store backups and a `C:\mycities\.local` directory to store keys/settings.
-4.  **Registry Rebuild**: The console calls `Refresh-Registry.ps1` to re-index all snapshots on the system.
+1.  **Directory Selection**: In the Web UI, the user can click **Browse...** next to the path field to open a native Windows `FolderBrowserDialog` graphical selector or type the path (e.g. `C:\mycities`) manually.
+2.  **Add Request**: Clicking **Add Project** sends a registration call to the backend.
+3.  **API Verification**: The endpoint `POST /api/projects/add` resolves the path. If the directory does not exist on disk, the backend automatically creates it. It validates the project name and appends the registration mapping to `projects.json`.
+4.  **Workspace Isolation**: The console automatically initializes the target workspace by creating a hidden `C:\mycities\.snapshots` directory to hold snapshots and a hidden `C:\mycities\.local` directory to store project settings.
+5.  **Registry Rebuild**: The console calls `Refresh-Registry.ps1` to index all snapshots.
 
 ### Step 2.2: Creating a Recovery Snapshot
 1.  **Selection**: The user selects a project (e.g. `MyPools`) and triggers a snapshot creation, providing a description (e.g. "Pre-release patch").
 2.  **Environment Probe**: `Create-Snapshot.ps1` checks for Podman and retrieves environment configurations (like database passwords and project names) from the project's `.env` or `.env.local` files.
 3.  **Container Teardown (Powered-Off Snapshot)**: If `Live` mode is not selected, the script calls `podman compose down` to stop all containers, preventing write operations during backup.
-4.  **Database Dump**: The script starts just the database container, probes it for mariadb-dump or mysqldump, and dumps the schema to `C:\mypools\snapshots\[timestamp]\database.sql`.
-5.  **Files Archiving**: The project directory files are compressed into `project.zip` using the `ZipArchive` library. To keep the backups lightweight, critical folders and files (like `wp-content/uploads`, `.git/`, `node_modules/`, and the `snapshots/` folder itself) are explicitly ignored.
-6.  **Gitignore Security**: The script automatically checks `.gitignore` in the project root, adding rules to block `snapshots/`, `.snapshots/`, and `.local/` from ever being staged or committed to git.
+4.  **Database Dump**: The script starts just the database container, probes it for mariadb-dump or mysqldump, and dumps the schema to `C:\mypools\.snapshots\[timestamp]\database.sql`.
+5.  **Files Archiving**: The project directory files are compressed into `project.zip` using the `ZipArchive` library. To keep the backups lightweight, critical folders and files (like `wp-content/uploads`, `.git/`, `node_modules/`, and the `.snapshots/` folder itself) are explicitly ignored.
+6.  **Gitignore Security**: The script automatically checks `.gitignore` in the project root, adding rules to block `.snapshots/` and `.local/` from ever being staged or committed to git.
 7.  **Metadata Generation**: Writes metadata details (timestamp, description, size, git branch/commit hash) to `snapshot.json` and creates a markdown recovery manual `recovery.md`.
-8.  **Re-Initialize**: Containers are restarted via `podman compose up -d`, `active.txt` is updated with the timestamp, and `Refresh-Registry.ps1` runs to re-index the list.
+8.  **Re-Initialize & Prune**: 
+    *   Containers are restarted via `podman compose up -d`.
+    *   `active.txt` is updated with the timestamp.
+    *   If a snapshot retention limit is set (e.g. 5), the oldest snapshot folders in `.snapshots/` are automatically deleted to clean up disk space.
+    *   `Refresh-Registry.ps1` runs to re-index the registry.
 
 ### Step 2.3: Restoring a Snapshot
 1.  **Safety Buffer**: `Restore-Snapshot.ps1` first executes `Create-Snapshot.ps1` with the `-Live -NoDatabase` flags, securing a backup of the current workspace files before restoring.

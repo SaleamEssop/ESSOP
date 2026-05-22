@@ -28,7 +28,7 @@ C:\
     ├── compose.yml            <-- Local Podman container configuration
     ├── .env / .env.local      <-- Environment file hosting database & app configs
     ├── .gitignore             <-- Auto-patched to exclude snapshots and secrets
-    ├── snapshots/             <-- Directory containing project recovery snapshots
+    ├── .snapshots/            <-- Directory containing project recovery snapshots
     │   ├── active.txt         <-- Pointer file containing the latest active snapshot name
     │   └── [timestamp]/       <-- Timestamped folder (e.g. 2026-05-22-1030)
     │       ├── project.zip    <-- Compressed archive of project code
@@ -50,7 +50,7 @@ The Node.js backend server (`server.js`) runs a non-blocking HTTP API and logs r
 *   **`GET /api/projects`**: Reads and returns the list of registered project names and directories from `projects.json`.
 *   **`POST /api/projects/add`**: Registers a new project directory path.
     *   **Payload**: `{ "path": "C:\\mycities", "name": "mycities" }`
-    *   **Logic**: Verifies that the path exists (creates it if missing), extracts the folder basename as the project name if omitted, writes to `projects.json`, initializes local directories `snapshots/` and `.local/`, and runs `Refresh-Registry.ps1`.
+    *   **Logic**: Verifies that the path exists (creates it if missing), extracts the folder basename as the project name if omitted, writes to `projects.json`, initializes local directories `.snapshots/` and `.local/`, and runs `Refresh-Registry.ps1`.
 *   **`DELETE /api/projects`**: Unregisters a project path mapping from `projects.json`. Does not touch the project files on disk. Triggers `Refresh-Registry.ps1`.
 
 ### Snapshot Management APIs
@@ -62,14 +62,20 @@ The Node.js backend server (`server.js`) runs a non-blocking HTTP API and logs r
 
 ### Git & Deployment APIs
 *   **`GET /api/git/status?project=[name]`**: Invokes local git commands inside the project's source directory to fetch the active branch name, untracked file count, modified file count, and details of modified files.
+*   **`GET /api/git/diff-preview?project=[name]&snapshotName=[name]`**: Computes line additions/deletions and modified file statistics comparing the production VPS HEAD commit and the target snapshot commit.
 *   **`POST /api/git/deploy`**: Initiates production deployment.
     *   **Payload**: `{ "project": "mypools", "snapshotName": "2026-05-22-1030", "commitMessage": "Deploy release v1.0", "overwriteDb": true }`
     *   **Enforcement Rule**: Rejects request with `400 Bad Request` if `snapshotName` is missing or set to `current-local` to prevent un-checkpointed deployments.
 
-### VPS Settings & Auditing APIs
-*   **`GET /api/settings?project=[name]`**: Reads SSH host, user, domain URL, and directory locations from the project's local config files (`.local/settings.json` and `.local/ssh.secret.txt`).
-*   **`POST /api/settings`**: Updates and persists SSH connection configuration profiles into the project's `.local/` folder.
+### VPS Settings, Cleanup & Diagnostic APIs
+*   **`GET /api/settings?project=[name]`**: Reads SSH host, user, domain URL, local repository path, deployment branch, and `retentionCount` from the project's local config files (`.local/settings.json` and `.local/ssh.secret.txt`).
+*   **`POST /api/settings`**: Updates and persists SSH connection credentials, repository configs, and the snapshot retention policy (`retentionCount`) into the project's `.local/` folder.
+*   **`GET /api/project/check-ports?project=[name]`**: Resolves mapped host ports inside the project's `compose.yml` (and `.env` variables) and runs an active socket binding test to verify if any local ports are currently occupied.
+*   **`GET /api/containers/stats?project=[name]`**: Queries resource statistics (CPU usage, Memory footprint, and Network IO) from `podman stats` matching the active container stack.
 *   **`GET /api/parity/check?project=[name]`**: Runs a comprehensive health audit checking local vs production systems and endpoint parity.
+
+### Directory Selection API
+*   **`GET /api/fs/browse`**: Spawns a native Windows `FolderBrowserDialog` using PowerShell WinForms, displaying a GUI path selector on the host desktop and returning the selected folder path.
 
 ---
 
@@ -79,17 +85,18 @@ Automation scripts are written in PowerShell 5.1, incorporating advanced error h
 
 ### A. Create-Snapshot.ps1
 1.  **Resolve Source**: Reads the target source directory from inputs or `projects.json`.
-2.  **GitIgnore Setup**: Automatically appends `snapshots/`, `.snapshots/`, and `.local/` to the project's `.gitignore` file.
+2.  **GitIgnore Setup**: Automatically appends `.snapshots/` and `.local/` to the project's `.gitignore` file.
 3.  **Container Audit**: Probes Podman for compose project containers.
 4.  **Database Backup**: If containers are running and database dump is requested:
     *   If running a non-live snapshot, gracefully tears down containers via `podman compose down`. It then spins up only the database container (`mysql`) temporarily to execute the database dump.
     *   Probes container for available dump binaries (`mariadb-dump` or `mysqldump`).
     *   Dumps schema and records to `database.sql` inside the snapshot timestamp directory.
 5.  **Files Archiving**: Uses the `System.IO.Compression` assembly to zip the codebase.
-    *   **Exclusions**: Excludes heavy user-uploaded contents (`wp-content/uploads`, `wp-content/cache`, `wp-content/upgrade`), local configs, subfolder backups (`snapshots`, `.snapshots`), secrets, git repositories (`.git`), and node modules to avoid recursive archive bloating.
+    *   **Exclusions**: Excludes heavy user-uploaded contents (`wp-content/uploads`, `wp-content/cache`, `wp-content/upgrade`), local configs, subfolder backups (`.snapshots`), secrets, git repositories (`.git`), and node modules to avoid recursive archive bloating.
 6.  **Metadata Writing**: Creates `snapshot.json` and a markdown guide `recovery.md`.
 7.  **Container Recovery**: Restarts the entire compose stack if it was powered down.
-8.  **Registry Sync**: Records the new snapshot identifier inside `snapshots/active.txt` and triggers a full registry scan.
+8.  **Registry Sync**: Records the new snapshot identifier inside `.snapshots/active.txt` and triggers a full registry scan.
+9.  **Retention Pruning**: If `-RetentionCount` is greater than 0, deletes the oldest directories inside `.snapshots/` exceeding the maximum limit to prevent disk bloat.
 
 ### B. Restore-Snapshot.ps1
 1.  **Safety Buffer**: Unless explicitly bypassed with `-SkipPreBackup`, it automatically runs `Create-Snapshot.ps1` on the active workspace before overwriting, saving a pre-restore checkpoint.
