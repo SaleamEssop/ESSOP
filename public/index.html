@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snapshot Recovery Console</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Google Fonts: Outfit (Heading) & Inter (Body) & JetBrains Mono (Console) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Layout Wrapper -->
+  <div class="app-layout">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="app-sidebar">
+      <div class="sidebar-header">
+        <svg class="do-logo" viewBox="0 0 24 24" width="28" height="28">
+          <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Zm-3,6a3,3,0,1,1,3,3A3,3,0,0,1,9,12Z"/>
+        </svg>
+        <div class="sidebar-logo-text">
+          <h2>Recovery</h2>
+          <span>SNAPSHOT PANEL</span>
+        </div>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="overview">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M10,20H14V14H10V20M4,20H8V10H4V20M16,20H20V6H16V20M3,22H21V24H3V22M10,2H14V12H10V2M4,5H8V8H4V5M16,2H20V4H16V2Z"/>
+          </svg>
+          Overview
+        </button>
+        <button class="nav-item" data-tab="snapshots">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Zm-3,6a3,3,0,1,1,3,3A3,3,0,0,1,9,12Z"/>
+          </svg>
+          Snapshots List
+        </button>
+        <button class="nav-item" data-tab="explorer">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M20,18H4V8H20M20,6H12L10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6Z"/>
+          </svg>
+          Folder Explorer
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.35 19.43,11.03L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.47,5.34 14.86,5.08L14.47,2.42C14.43,2.18 14.22,2 13.97,2H9.97C9.72,2 9.51,2.18 9.47,2.42L9.08,5.08C8.47,5.34 7.9,5.66 7.38,6.05L4.89,5.05C4.67,4.96 4.4,5.05 4.28,5.27L2.28,8.73C2.16,8.95 2.21,9.22 2.4,9.37L4.51,11.03C4.47,11.35 4.45,11.67 4.45,12C4.45,12.33 4.47,12.65 4.51,12.97L2.4,14.63C2.21,14.78 2.16,15.05 2.28,15.27L4.28,18.73C4.4,18.95 4.67,19.04 4.89,18.95L7.38,17.95C7.9,18.34 8.47,18.66 9.08,18.92L9.47,21.58C9.51,21.82 9.72,22 9.97,22H13.97C14.22,22 14.43,21.82 14.47,21.58L14.86,18.92C15.47,18.66 16.04,18.34 16.56,17.95L19.05,18.95C19.27,19.04 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/>
+          </svg>
+          Credentials & Settings
+        </button>
+        <button class="nav-item" data-tab="git">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12C2,16.42 4.87,20.17 8.84,21.5C9.34,21.58 9.5,21.27 9.5,21C9.5,20.77 9.5,20.14 9.5,19.31C6.73,19.91 6.14,17.97 6.14,17.97C5.68,16.81 5.03,16.5 5.03,16.5C4.12,15.88 5.1,15.9 5.1,15.9C6.1,15.97 6.63,16.93 6.63,16.93C7.5,18.45 8.97,18 9.54,17.76C9.63,17.11 9.89,16.67 10.17,16.42C7.95,16.17 5.62,15.31 5.62,11.5C5.62,10.39 6,9.5 6.65,8.79C6.55,8.54 6.2,7.5 6.75,6.15C6.75,6.15 7.59,5.88 9.5,7.17C10.29,6.95 11.15,6.84 12,6.84C12.85,6.84 13.71,6.95 14.5,7.17C16.41,5.88 17.25,6.15 17.25,6.15C17.8,7.5 17.45,8.54 17.35,8.79C18,9.5 18.38,10.39 18.38,11.5C18.38,15.32 16.04,16.16 13.81,16.41C14.17,16.72 14.5,17.33 14.5,18.26C14.5,19.6 14.5,20.68 14.5,21C14.5,21.27 14.66,21.59 15.17,21.5C19.14,20.16 22,16.42 22,12A10,10,0,0,0,12,2Z"/>
+          </svg>
+          Git Deployment
+        </button>
+        <button class="nav-item" data-tab="parity">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M12,2A10,10,0,1,0 22,12A10,10,0,0,0 12,2M12,4A8,8 0 1,1 4,12A8,8 0 0,1 12,4M12,18A6,6 0 1,0 6,12A6,6 0 0,0 12,18M12,8A4,4 0 1,1 8,12A4,4 0 0,1 12,8Z"/>
+          </svg>
+          Health & Parity
+        </button>
+        <button class="nav-item" data-tab="terminal">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M20,19V7H4V19H20M20,5A2,2 0 0,1 22,7V19A2,2 0 0,1 20,21H4A2,2 0 0,1 2,19V7A2,2 0 0,1 4,5H20M13,17V15H18V17H13M9.58,13L5.58,17L4.17,15.58L7,12.75L4.17,9.92L5.58,8.5L9.58,12.5A0.35,0.35 0 0,1 9.58,13Z"/>
+          </svg>
+          Live Console
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-status-box">
+          <div class="sidebar-status-header">
+            <div class="sidebar-status-left">
+              <span class="status-dot dot-idle" id="sidebar-status-dot"></span>
+              <span class="status-text" id="sidebar-status-text">System Idle</span>
+            </div>
+            <span class="progress-percentage-text" id="sidebar-progress-text" style="display: none;">0%</span>
+          </div>
+          <div class="progress-bar-container" id="sidebar-progress-container" style="display: none;">
+            <div class="progress-bar-fill" id="sidebar-progress-fill"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <div class="app-workspace">
+      
+      <!-- Top Header Bar -->
+      <header class="app-header">
+        <div class="header-left">
+          <div class="breadcrumbs">
+            <span class="breadcrumb-parent">Snapshot Console</span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-active" id="current-tab-title">Overview</span>
+          </div>
+        </div>
+        
+        <div class="header-right" style="display: flex; align-items: center; gap: 12px;">
+          <div class="project-selector-wrapper">
+            <label for="project-select">Environment:</label>
+            <div class="select-custom">
+              <select id="project-select">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+          </div>
+          <button id="add-project-btn" class="btn btn-secondary flex-center" title="Register local project folder" style="padding: 6px 12px; height: 38px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 4px;"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            Add Project
+          </button>
+          <button id="delete-project-btn" class="btn btn-danger flex-center" title="Remove project from panel list" style="padding: 6px 12px; height: 38px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 4px;"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            Remove
+          </button>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <main class="app-main-content">
+        
+        <!-- ================= OVERVIEW TAB ================= -->
+        <section id="tab-overview" class="tab-panel active">
+          
+          <!-- State Overview Cards -->
+          <div class="overview-grid-metrics">
+            <div class="metric-card card">
+              <div class="metric-icon metric-blue">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path fill="currentColor" d="M19 13H5V11H19V13M19 9H5V7H19V9M19 17H5V15H19V17M20 3H4C2.89 3 2 3.89 2 5V19C2 20.11 2.89 21 4 21H20C21.11 21 22 20.11 22 19V5C22 3.89 21.11 3 20 3Z"/>
+                </svg>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">Active Directory</span>
+                <h3 class="metric-value text-ellipsis" id="overview-dir">-</h3>
+              </div>
+            </div>
+
+            <div class="metric-card card">
+              <div class="metric-icon metric-teal">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Z"/>
+                </svg>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">Recovery Snapshots</span>
+                <h3 class="metric-value" id="overview-count">0</h3>
+              </div>
+            </div>
+
+            <div class="metric-card card">
+              <div class="metric-icon metric-purple">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path fill="currentColor" d="M12,3c-4.97,0-9,4.03-9,9H1l3.89,3.89.07.14L9,12H6c0-3.31,2.69-6,6-6s6,2.69,6,6-2.69,6-6,6c-1.66,0-3.17-.67-4.28-1.76L6.29,17.66C7.75,19.11,9.77,20,12,20c4.97,0,9-4.03,9-9S16.97,3,12,3Z"/>
+                </svg>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">Latest Snapshot</span>
+                <h3 class="metric-value" id="overview-latest">-</h3>
+              </div>
+            </div>
+          </div>
+
+          <div class="overview-layout-split">
+            <!-- Project Configurations -->
+            <div class="card detail-card">
+              <h3 class="card-title">Project Details</h3>
+              <p class="card-subtitle">Server environment configurations map</p>
+              
+              <div class="info-table-container">
+                <table class="info-table">
+                  <tbody>
+                    <tr>
+                      <td class="info-key">Compose Profile</td>
+                      <td class="info-val text-white" id="overview-compose-name">-</td>
+                    </tr>
+                    <tr>
+                      <td class="info-key">Container Engine</td>
+                      <td class="info-val"><span class="badge badge-success">Podman Desktop</span></td>
+                    </tr>
+                    <tr>
+                      <td class="info-key">Snapshot Root Path</td>
+                      <td class="info-val"><code>C:\snapshots\</code></td>
+                    </tr>
+                    <tr>
+                      <td class="info-key">Disk Location</td>
+                      <td class="info-val">Local System (Independent)</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Create Snapshot Overview Form -->
+            <div class="card detail-card flex-between">
+              <div>
+                <h3 class="card-title">Take Rapid Snapshot</h3>
+                <p class="card-subtitle">Creates a consistent backup using active default config</p>
+              </div>
+
+              <form id="overview-rapid-form" class="action-form">
+                <div class="form-group">
+                  <input type="text" id="rapid-desc" placeholder="Snapshot description (e.g. baseline backup)" required>
+                </div>
+                <div class="form-row-checkboxes">
+                  <label class="switch-container">
+                    <input type="checkbox" id="rapid-live">
+                    <span class="switch-slider"></span>
+                    <span class="switch-label-text">
+                      <strong>Live (no shutdown)</strong>
+                    </span>
+                  </label>
+                  <label class="switch-container">
+                    <input type="checkbox" id="rapid-nodb">
+                    <span class="switch-slider"></span>
+                    <span class="switch-label-text">
+                      <strong>Exclude DB</strong>
+                    </span>
+                  </label>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full flex-center font-bold">
+                  Take Snapshot
+                </button>
+              </form>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- ================= SNAPSHOTS TAB ================= -->
+        <section id="tab-snapshots" class="tab-panel">
+          <div class="card panel-full-card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Recovery Points Registry</h3>
+                <p class="card-subtitle">Manage recovery backups. Restores will overwrite existing project directories.</p>
+              </div>
+              <button id="refresh-snapshots-btn" class="btn btn-secondary flex-center">
+                <svg viewBox="0 0 24 24" width="16" height="16" class="icon-refresh">
+                  <path fill="currentColor" d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
+                </svg>
+                Sync List
+              </button>
+            </div>
+
+            <div class="table-container">
+              <table class="snapshots-table">
+                <thead>
+                  <tr>
+                    <th>Created</th>
+                    <th>Description</th>
+                    <th>Consistent</th>
+                    <th>Database</th>
+                    <th>Files Archive</th>
+                    <th>Git Reference</th>
+                    <th class="actions-header">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="snapshots-grid-body">
+                  <!-- Dynamically populated -->
+                  <tr>
+                    <td colspan="7" class="loading-state">
+                      <div class="spinner"></div>
+                      Loading registry data...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= EXPLORER TAB ================= -->
+        <section id="tab-explorer" class="tab-panel">
+          <div class="explorer-layout">
+            
+            <!-- Checklist Card -->
+            <div class="card folder-checklist-card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title">Project File Explorer</h3>
+                  <p class="card-subtitle">Select root-level items to include in the backup. Unchecked items are excluded.</p>
+                </div>
+                <div class="explorer-actions-group">
+                  <button id="explorer-select-all" class="btn btn-text-primary text-xs">Select All</button>
+                  <button id="explorer-deselect-all" class="btn btn-text-primary text-xs">Deselect All</button>
+                </div>
+              </div>
+
+              <!-- List of folder items -->
+              <div class="explorer-items-list" id="explorer-items-container">
+                <div class="loading-state">
+                  <div class="spinner"></div>
+                  Reading project files...
+                </div>
+              </div>
+            </div>
+
+            <!-- Configuration Summary Side Card -->
+            <div class="card explorer-summary-card">
+              <h3 class="card-title-small">Snapshot Exclusions Summary</h3>
+              <p class="card-subtitle">Dynamic exclude paths fed to zipping script</p>
+
+              <div class="exclusions-list-container">
+                <div class="empty-exclusions" id="empty-excludes-label">
+                  No custom exclusions. Everything will be backed up.
+                </div>
+                <div class="exclusions-badges-grid" id="excludes-badges-container">
+                  <!-- Dynamically populated tags -->
+                </div>
+              </div>
+
+              <div class="action-divider"></div>
+
+              <form id="explorer-snapshot-form" class="action-form">
+                <div class="form-group">
+                  <label for="explorer-desc">Custom Snapshot Description</label>
+                  <input type="text" id="explorer-desc" placeholder="e.g. Baseline without media folder" required>
+                </div>
+
+                <div class="form-checkboxes">
+                  <label class="switch-container">
+                    <input type="checkbox" id="explorer-live">
+                    <span class="switch-slider"></span>
+                    <span class="switch-label-text">
+                      <strong>Live backup (no shutdown)</strong>
+                    </span>
+                  </label>
+                  <label class="switch-container">
+                    <input type="checkbox" id="explorer-nodb">
+                    <span class="switch-slider"></span>
+                    <span class="switch-label-text">
+                      <strong>Exclude MySQL database</strong>
+                    </span>
+                  </label>
+                </div>
+
+                <button type="submit" id="explorer-submit-btn" class="btn btn-primary btn-full flex-center font-bold">
+                  Take Custom Snapshot
+                </button>
+              </form>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ================= TERMINAL TAB ================= -->
+        <section id="tab-terminal" class="tab-panel">
+          <div class="card terminal-full-card">
+            <div class="card-header border-none terminal-header-layout">
+              <div class="terminal-header-left">
+                <div>
+                  <h3 class="card-title">Console Output Stream</h3>
+                  <p class="card-subtitle">PowerShell processes stdout / stderr streaming logs</p>
+                </div>
+              </div>
+              <div class="terminal-header-right-group">
+                <span class="progress-percentage-text" id="terminal-progress-text" style="display: none;">0%</span>
+                <button id="terminal-clear-btn" class="btn btn-secondary">Clear Console</button>
+              </div>
+              <div class="progress-bar-container terminal-progress" id="terminal-progress-container" style="display: none;">
+                <div class="progress-bar-fill" id="terminal-progress-fill"></div>
+              </div>
+            </div>
+            
+            <div class="terminal-body-full">
+              <pre id="terminal-output-pre">Console is ready. Executed actions will stream output logs here...</pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= SETTINGS & CREDENTIALS TAB ================= -->
+        <section id="tab-settings" class="tab-panel">
+          <div class="card panel-full-card" style="max-width: 800px; margin: 0 auto;">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Settings & Credentials</h3>
+                <p class="card-subtitle">Configure SSH credentials for the target VPS and paths for the local Git repository.</p>
+              </div>
+            </div>
+
+            <form id="settings-form" class="action-form" style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+              
+              <!-- VPS SSH Credentials Section -->
+              <div style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 20px;">
+                <h4 style="font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                  <svg viewBox="0 0 24 24" width="18" height="18" class="text-teal"><path fill="currentColor" d="M12,2A10,10,0,0,0,2,12A10,10,0,0,0,12,22A10,10,0,0,0,22,12A10,10,0,0,0,12,2M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4M12,18c-2.76,0-5-2.24-5-5c0-1.5,0.67-2.85,1.73-3.76L12,14.5L16.27,9.24C17.33,10.15 18,11.5 18,13C18,15.76 15.76,18 12,18Z"/></svg>
+                  VPS SSH Connection
+                </h4>
+                
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                  <div class="form-group">
+                    <label for="settings-ssh-host">VPS Host IP Address</label>
+                    <input type="text" id="settings-ssh-host" placeholder="e.g. 152.42.220.5" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="settings-ssh-user">SSH Username</label>
+                    <input type="text" id="settings-ssh-user" placeholder="e.g. root" required>
+                  </div>
+                </div>
+
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+                  <div class="form-group">
+                    <label for="settings-ssh-password">SSH Password</label>
+                    <input type="password" id="settings-ssh-password" placeholder="••••••••••••" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="settings-ssh-hostkey">Host Key Verification String (SHA256)</label>
+                    <input type="text" id="settings-ssh-hostkey" placeholder="e.g. SHA256:ZJmY20ME..." required>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Git Repository Section -->
+              <div>
+                <h4 style="font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                  <svg viewBox="0 0 24 24" width="18" height="18" class="text-teal"><path fill="currentColor" d="M12,2A10,10,0,0,0,2,12C2,16.42 4.87,20.17 8.84,21.5C9.34,21.58 9.5,21.27 9.5,21C9.5,20.77 9.5,20.14 9.5,19.31C6.73,19.91 6.14,17.97 6.14,17.97C5.68,16.81 5.03,16.5 5.03,16.5C4.12,15.88 5.1,15.9 5.1,15.9C6.1,15.97 6.63,16.93 6.63,16.93C7.5,18.45 8.97,18 9.54,17.76C9.63,17.11 9.89,16.67 10.17,16.42C7.95,16.17 5.62,15.31 5.62,11.5C5.62,10.39 6,9.5 6.65,8.79C6.55,8.54 6.2,7.5 6.75,6.15C6.75,6.15 7.59,5.88 9.5,7.17C10.29,6.95 11.15,6.84 12,6.84C12.85,6.84 13.71,6.95 14.5,7.17C16.41,5.88 17.25,6.15 17.25,6.15C17.8,7.5 17.45,8.54 17.35,8.79C18,9.5 18.38,10.39 18.38,11.5C18.38,15.32 16.04,16.16 13.81,16.41C14.17,16.72 14.5,17.33 14.5,18.26C14.5,19.6 14.5,20.68 14.5,21C14.5,21.27 14.66,21.59 15.17,21.5C19.14,20.16 22,16.42 22,12A10,10,0,0,0,12,2Z"/></svg>
+                  Git Repository Settings
+                </h4>
+                
+                <div class="form-row" style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
+                  <div class="form-group">
+                    <label for="settings-git-repo">Local Repository Path</label>
+                    <input type="text" id="settings-git-repo" placeholder="e.g. C:\Podman\MyPools" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="settings-git-branch">Deployment Branch</label>
+                    <input type="text" id="settings-git-branch" placeholder="e.g. main" required>
+                  </div>
+                </div>
+
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+                  <div class="form-group">
+                    <label for="settings-site-url">Website URL (for health checks)</label>
+                    <input type="text" id="settings-site-url" placeholder="e.g. https://mypools.co.za" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="settings-vps-root">VPS Installation Root</label>
+                    <input type="text" id="settings-vps-root" placeholder="e.g. /opt/mypools" required>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top: 12px; display: flex; justify-content: flex-end;">
+                <button type="submit" id="settings-save-btn" class="btn btn-primary font-bold" style="padding: 10px 24px;">
+                  Save Settings
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </section>
+
+        <!-- ================= GIT DEPLOYMENT TAB ================= -->
+        <section id="tab-git" class="tab-panel">
+          <div class="git-layout">
+            
+            <!-- Git Repository status & changes list -->
+            <div class="card git-status-card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title">Local Modifications (Git)</h3>
+                  <p class="card-subtitle">Repository: <code class="text-teal">C:\Podman\MyPools</code> | Branch: <strong id="git-branch-val" class="text-white">-</strong></p>
+                </div>
+                <button id="git-refresh-btn" class="btn btn-secondary flex-center">
+                  <svg viewBox="0 0 24 24" width="16" height="16" class="icon-refresh">
+                    <path fill="currentColor" d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
+                  </svg>
+                  Refresh
+                </button>
+              </div>
+
+              <!-- Stats Summary Cards -->
+              <div class="git-status-summary-bar">
+                <div class="git-summary-item summary-modified">
+                  <span class="git-summary-count" id="git-modified-count">0</span>
+                  <span class="git-summary-label">Modified Files</span>
+                </div>
+                <div class="git-summary-item summary-untracked">
+                  <span class="git-summary-count" id="git-untracked-count">0</span>
+                  <span class="git-summary-label">Untracked Files</span>
+                </div>
+              </div>
+
+              <!-- Files list -->
+              <div class="git-files-list-wrapper">
+                <ul class="git-files-list" id="git-files-container">
+                  <!-- Dynamically populated -->
+                  <li class="git-empty-state">No modified or untracked files. Working directory clean.</li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Deploy Action and Stepper Monitoring Panel -->
+            <div class="card git-action-card">
+              <h3 class="card-title-small">Commit & Deploy</h3>
+              <p class="card-subtitle">Push changes to production environment with CI/CD verification</p>
+
+              <form id="git-deploy-form" class="action-form">
+                <div class="form-group">
+                  <label for="git-snapshot-select">Deploy Source Snapshot</label>
+                  <div class="select-custom">
+                    <select id="git-snapshot-select" required>
+                      <option value="">-- Select a recovery snapshot --</option>
+                      <!-- Dynamically populated snapshots -->
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="git-commit-message">Commit Message</label>
+                  <textarea id="git-commit-message" placeholder="e.g. Fixed wp-gallery asset port leak issues" rows="3" required></textarea>
+                </div>
+
+                <div class="form-checkboxes" style="margin: 16px 0;">
+                  <label class="switch-container">
+                    <input type="checkbox" id="git-overwrite-db">
+                    <span class="switch-slider"></span>
+                    <span class="switch-label-text">
+                      <strong>Overwrite Production Database</strong>
+                    </span>
+                  </label>
+                </div>
+
+                <div class="form-group" id="git-db-confirm-group" style="display: none; margin-top: 12px; margin-bottom: 16px;">
+                  <div class="alert-box alert-danger" style="margin-bottom: 12px; font-size: 13px;">
+                    <strong>CAUTION:</strong> Overwriting the production database will completely replace live user data and settings. This cannot be undone.
+                  </div>
+                  <label for="git-db-confirm-input">Type <strong class="text-danger">OVERWRITE</strong> to authorize database replacement:</label>
+                  <input type="text" id="git-db-confirm-input" placeholder="OVERWRITE" autocomplete="off">
+                </div>
+
+                <button type="submit" id="git-deploy-btn" class="btn btn-primary btn-full flex-center font-bold">
+                  <svg viewBox="0 0 24 24" width="18" height="18" style="margin-right: 6px;">
+                    <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2M11 16H13V18H11V16M11 6H13V14H11V6Z"/>
+                  </svg>
+                  Push to Production
+                </button>
+              </form>
+
+              <!-- Deployment Pipeline Monitoring Stepper -->
+              <div class="git-monitor-stepper" id="git-stepper" style="display: none;">
+                <h4 class="stepper-title">Deployment Steps</h4>
+                <ul class="monitor-steps-list">
+                  <li class="monitor-step step-pending" id="step-git-commit">
+                    <div class="step-icon"><span class="step-dot"></span></div>
+                    <div class="step-content">
+                      <span class="step-name">Local Commit</span>
+                      <span class="step-desc">Stage and commit local code changes</span>
+                    </div>
+                  </li>
+                  <li class="monitor-step step-pending" id="step-git-push">
+                    <div class="step-icon"><span class="step-dot"></span></div>
+                    <div class="step-content">
+                      <span class="step-name">Push to GitHub</span>
+                      <span class="step-desc">Transfer commits to origin/main</span>
+                    </div>
+                  </li>
+                  <li class="monitor-step step-pending" id="step-git-scp">
+                    <div class="step-icon"><span class="step-dot"></span></div>
+                    <div class="step-content">
+                      <span class="step-name">Snapshot Transfer</span>
+                      <span class="step-desc">SCP database directly to VPS — ephemeral, never git-tracked</span>
+                    </div>
+                  </li>
+                  <li class="monitor-step step-pending" id="step-git-cicd">
+                    <div class="step-icon"><span class="step-dot"></span></div>
+                    <div class="step-content">
+                      <span class="step-name">CI/CD Syncing</span>
+                      <span class="step-desc">Awaiting VPS deploy-status.json confirmation</span>
+                    </div>
+                  </li>
+                  <li class="monitor-step step-pending" id="step-git-verify">
+                    <div class="step-icon"><span class="step-dot"></span></div>
+                    <div class="step-content">
+                      <span class="step-name">Health &amp; Parity</span>
+                      <span class="step-desc">Verify containers, HTTPS, and port-leak checks</span>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ================= HEALTH & PARITY TAB ================= -->
+        <section id="tab-parity" class="tab-panel">
+          <div class="parity-layout">
+            
+            <!-- Parity Toolbar -->
+            <div class="card parity-toolbar-card" style="margin-bottom: 24px;">
+              <div class="parity-toolbar-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div>
+                  <h3 class="card-title">Production Health &amp; Parity Auditing</h3>
+                  <p class="card-subtitle" style="margin: 0;">Compare local configuration with live VPS production. Checks container status, screen HTTP codes, database leaks, SSL details, and server resources.</p>
+                </div>
+                <button id="run-parity-btn" class="btn btn-primary flex-center font-bold" style="padding: 12px 24px;">
+                  <svg viewBox="0 0 24 24" width="18" height="18" style="margin-right: 6px;">
+                    <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2M10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z"/>
+                  </svg>
+                  Run Verification Audit
+                </button>
+              </div>
+            </div>
+
+            <!-- Parity Metrics Grid -->
+            <div class="parity-grid-metrics" id="parity-metrics" style="display: none;">
+              <div class="metric-card card" id="metric-git-sync">
+                <div class="metric-icon metric-blue">
+                  <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path fill="currentColor" d="M12,6V9L16,5L12,1V4A8,8 0 0,0 4,12C4,14.21 4.9,16.2 6.34,17.65L7.75,16.24C6.66,15.15 6,13.66 6,12A6,6 0 0,1 12,6M18.66,6.35L17.25,7.76C18.34,8.85 19,10.34 19,12A6,6 0 0,1 13,18V15L9,19L13,23V20A8,8 0 0,0 21,12C21,9.79 20.1,7.8 18.66,6.35Z"/>
+                  </svg>
+                </div>
+                <div class="metric-details">
+                  <span class="metric-label">Git Sync Status</span>
+                  <h3 class="metric-value" id="val-git-sync">-</h3>
+                </div>
+              </div>
+
+              <div class="metric-card card" id="metric-site-health">
+                <div class="metric-icon metric-teal">
+                  <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12C2,16.4 4.5,20.2 8.2,21.5C8.3,21.5 8.4,21.4 8.4,21.3V19.6C5.9,20.1 5.3,18.4 5.3,18.4C4.9,17.4 4.3,17.2 4.3,17.2C3.5,16.7 4.4,16.7 4.4,16.7C5.3,16.8 5.8,17.7 5.8,17.7C6.6,19.1 7.9,18.7 8.4,18.5C8.5,17.9 8.7,17.5 9,17.2C6.8,17 4.5,16.1 4.5,12.3C4.5,11.2 4.9,10.3 5.5,9.6C5.4,9.3 5,8.3 5.6,7C5.6,7 6.4,6.7 8.3,8C9,7.8 9.8,7.7 10.6,7.7C11.4,7.7 12.2,7.8 12.9,8C14.8,6.7 15.6,7 15.6,7C16.2,8.3 15.8,9.3 15.7,9.6C16.3,10.3 16.7,11.2 16.7,12.3C16.7,16.2 14.4,17 12.2,17.3C12.6,17.6 12.9,18.2 12.9,19.1V21.3C12.9,21.4 13,21.5 13.1,21.5C16.8,20.2 19.3,16.4 19.3,12A10,10,0,0,0,12,2Z"/>
+                  </svg>
+                </div>
+                <div class="metric-details">
+                  <span class="metric-label">Site Status</span>
+                  <h3 class="metric-value" id="val-site-status">-</h3>
+                </div>
+              </div>
+
+              <div class="metric-card card" id="metric-ssl-status">
+                <div class="metric-icon metric-purple">
+                  <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path fill="currentColor" d="M12,17A2,2 0 0,0 14,15C14,13.89 13.1,13 12,13A2,2 0 0,0 10,15A2,2 0 0,0 12,17M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V10C4,8.89 4.9,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z"/>
+                  </svg>
+                </div>
+                <div class="metric-details">
+                  <span class="metric-label">SSL Validity</span>
+                  <h3 class="metric-value" id="val-ssl-status">-</h3>
+                </div>
+              </div>
+
+              <div class="metric-card card" id="metric-security-status">
+                <div class="metric-icon metric-green">
+                  <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path fill="currentColor" d="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M12,5A3,3 0 0,1 15,8C15,9.39 14.05,10.55 12.75,10.88V15H11.25V10.88C9.95,10.55 9,9.39 9,8A3,3 0 0,1 12,5M12,7A1,1 0 0,0 11,8A1,1 0 0,0 12,9A1,1 0 0,0 13,8A1,1 0 0,0 12,7Z"/>
+                  </svg>
+                </div>
+                <div class="metric-details">
+                  <span class="metric-label">Security Scan</span>
+                  <h3 class="metric-value" id="val-security-status">-</h3>
+                </div>
+              </div>
+            </div>
+
+            <!-- Parity Main Section Grid -->
+            <div class="parity-main-grid" id="parity-results" style="display: none; margin-top: 20px;">
+              
+              <!-- Container Parity Check -->
+              <div class="card detail-card" style="grid-column: span 2; margin-bottom: 24px;">
+                <h3 class="card-title">Services &amp; Container Parity</h3>
+                <p class="card-subtitle" style="margin-bottom: 16px;">Compares running Podman container service instances in Local vs VPS Production environments</p>
+                <div class="table-container">
+                  <table class="snapshots-table">
+                    <thead>
+                      <tr>
+                        <th>Service Component</th>
+                        <th>Local Compose Instance</th>
+                        <th>VPS Production Instance</th>
+                        <th>Parity Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="parity-containers-tbody">
+                      <!-- Dynamically populated -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Endpoint Health Check (All screens 200) -->
+              <div class="card detail-card" style="grid-column: span 2; margin-bottom: 24px;">
+                <h3 class="card-title">Screen Status &amp; Performance Parity (HTTP 200)</h3>
+                <p class="card-subtitle" style="margin-bottom: 16px;">Fetches major application endpoints simultaneously to verify routing, latency, and matching page titles</p>
+                <div class="table-container">
+                  <table class="snapshots-table">
+                    <thead>
+                      <tr>
+                        <th>Page Target</th>
+                        <th>Local Status (HTTP)</th>
+                        <th>Local Latency</th>
+                        <th>Production Status (HTTPS)</th>
+                        <th>Production Latency</th>
+                        <th>Title Verification</th>
+                      </tr>
+                    </thead>
+                    <tbody id="parity-endpoints-tbody">
+                      <!-- Dynamically populated -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="parity-split-diagnostics" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                <!-- System Diagnostics & Security Scan -->
+                <div class="card detail-card">
+                  <h3 class="card-title">Security &amp; Port Audits</h3>
+                  <p class="card-subtitle" style="margin-bottom: 16px;">Scans production payloads to prevent leaks and check SSL properties</p>
+                  
+                  <div class="diagnostics-panel">
+                    <div class="diag-item">
+                      <span class="diag-label">Port Leak Check (9080 / 9082)</span>
+                      <span class="diag-value" id="diag-port-leak">-</span>
+                    </div>
+                    <div class="diag-item">
+                      <span class="diag-label">Database Connection Check</span>
+                      <span class="diag-value" id="diag-db-health">-</span>
+                    </div>
+                    <div class="diag-item">
+                      <span class="diag-label">SSL Domain Name</span>
+                      <span class="diag-value font-mono text-xs" id="diag-ssl-domain">-</span>
+                    </div>
+                    <div class="diag-item">
+                      <span class="diag-label">SSL Authority Issuer</span>
+                      <span class="diag-value font-mono text-xs" id="diag-ssl-issuer">-</span>
+                    </div>
+                    <div class="diag-item">
+                      <span class="diag-label">SSL Expiry Date</span>
+                      <span class="diag-value font-mono text-xs" id="diag-ssl-expiry">-</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- VPS Host System Resources -->
+                <div class="card detail-card">
+                  <h3 class="card-title">VPS Host Diagnostics</h3>
+                  <p class="card-subtitle" style="margin-bottom: 16px;">Reports operating system metrics queried directly from the cloud provider virtual server</p>
+                  
+                  <div class="diagnostics-panel">
+                    <div class="diag-item">
+                      <span class="diag-label">Root Disk Space Usage (df -h)</span>
+                      <span class="diag-value" id="diag-sys-disk">-</span>
+                    </div>
+                    <div class="diag-item">
+                      <span class="diag-label">RAM Allocation (free -m)</span>
+                      <span class="diag-value text-xs font-mono" id="diag-sys-ram">-</span>
+                    </div>
+                    <div class="diag-item">
+                      <span class="diag-label">CPU System Load (uptime)</span>
+                      <span class="diag-value text-xs font-mono" id="diag-sys-cpu">-</span>
+                    </div>
+                    <div class="diag-item">
+                      <span class="diag-label">Local Git Commit HEAD</span>
+                      <span class="diag-value font-mono text-xs" id="diag-git-local-commit">-</span>
+                    </div>
+                    <div class="diag-item">
+                      <span class="diag-label">VPS Git Commit HEAD</span>
+                      <span class="diag-value font-mono text-xs" id="diag-git-vps-commit">-</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Parity Audit Loading State -->
+            <div class="card flex-center" id="parity-loading" style="display: none; padding: 60px; min-height: 300px; flex-direction: column; gap: 16px;">
+              <div class="spinner" style="width: 48px; height: 48px; border-width: 4px;"></div>
+              <div style="text-align: center;">
+                <h4 style="font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px;">Performing Parity Audits...</h4>
+                <p class="card-subtitle" style="margin: 0;">Querying local repo, executing remote SSH metrics commands, testing page status codes, and fetching certificate parameters.</p>
+              </div>
+            </div>
+
+            <!-- Empty Parity State -->
+            <div class="card flex-center" id="parity-empty" style="padding: 80px 20px; text-align: center; flex-direction: column; gap: 16px;">
+              <div style="background: rgba(30, 41, 59, 0.5); padding: 16px; border-radius: 50%; border: 1px solid var(--border-subtle); display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted);">
+                <svg viewBox="0 0 24 24" width="36" height="36">
+                  <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2M13 17H11V15H13V17M13 13H11V7H13V13Z"/>
+                </svg>
+              </div>
+              <div>
+                <h4 style="font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px;">No Parity Check Executed Yet</h4>
+                <p class="card-subtitle" style="margin: 0; max-width: 480px; margin-left: auto; margin-right: auto;">Click the button above to run a live health check validation that production mirrors the local environments.</p>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Docked Mini-Terminal (Floating panel shown at bottom right) -->
+  <div class="docked-mini-console" id="mini-console">
+    <div class="mini-console-header" id="mini-console-header">
+      <div class="mini-console-left">
+        <span class="status-dot dot-idle" id="mini-console-dot"></span>
+        <span class="mini-console-title" id="mini-console-title">Console Output</span>
+      </div>
+      <div class="mini-console-right-group">
+        <span class="progress-percentage-text" id="mini-progress-text" style="display: none;">0%</span>
+        <button class="mini-console-expand" id="mini-console-expand-btn">
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path fill="currentColor" d="M12,18.17L18.07,12.1L19.5,13.5L12,21L4.5,13.5L5.93,12.1L12,18.17M12,5.83L5.93,11.9L4.5,10.5L12,3L19.5,10.5L18.07,11.9L12,5.83Z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="progress-bar-container mini-progress" id="mini-progress-container" style="display: none;">
+      <div class="progress-bar-fill" id="mini-progress-fill"></div>
+    </div>
+    <div class="mini-console-body" id="mini-console-body">
+      <pre id="mini-console-pre">Waiting for operations...</pre>
+    </div>
+  </div>
+
+  <!-- Restore Confirmation Modal -->
+  <div class="modal-overlay" id="restore-modal">
+    <div class="modal-box">
+      <div class="modal-header header-warning">
+        <div class="modal-icon">
+          <svg viewBox="0 0 24 24" width="24" height="24">
+            <path fill="currentColor" d="M12,2L1,21H23L12,2M12,6L19.53,19H4.47L12,6M11,9V13H13V9H11M11,15V17H13V15H11Z"/>
+          </svg>
+        </div>
+        <h3>Confirm Restore Recovery</h3>
+      </div>
+      
+      <div class="modal-content">
+        <p>You are initiating a system recovery for <strong id="modal-restore-project" class="text-white"></strong> from the selected snapshot:</p>
+        
+        <div class="snapshot-details-card">
+          <div><strong>Snapshot ID:</strong> <span id="modal-restore-id"></span></div>
+          <div><strong>Description:</strong> <span id="modal-restore-desc"></span></div>
+          <div><strong>Created Date:</strong> <span id="modal-restore-time"></span></div>
+        </div>
+        
+        <div class="alert-box alert-danger">
+          <strong>CRITICAL WARNING:</strong> Restoring will completely overwrite the files in the project path. A live safety pre-restore backup will be created unless checked below.
+        </div>
+
+        <div class="form-checkboxes" style="margin: 12px 0;">
+          <label class="switch-container">
+            <input type="checkbox" id="modal-restore-skip-backup">
+            <span class="switch-slider"></span>
+            <span class="switch-label-text">
+              <strong>Skip safety pre-backup</strong>
+              <span class="switch-desc text-danger">Force restoration without safety images (NOT RECOMMENDED).</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="restore-confirm-input">Type <strong class="text-danger">RESTORE</strong> to confirm action:</label>
+          <input type="text" id="restore-confirm-input" placeholder="RESTORE" autocomplete="off">
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button id="cancel-restore-btn" class="btn btn-secondary">Cancel</button>
+        <button id="confirm-restore-btn" class="btn btn-danger" disabled>Execute Recovery</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal-overlay" id="delete-modal">
+    <div class="modal-box">
+      <div class="modal-header header-danger">
+        <div class="modal-icon">
+          <svg viewBox="0 0 24 24" width="24" height="24">
+            <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+          </svg>
+        </div>
+        <h3>Permanently Delete Snapshot?</h3>
+      </div>
+      
+      <div class="modal-content">
+        <p>Confirm the permanent removal of the following recovery snapshot:</p>
+        
+        <div class="snapshot-details-card">
+          <div><strong>Snapshot ID:</strong> <span id="modal-delete-id"></span></div>
+          <div><strong>Description:</strong> <span id="modal-delete-desc"></span></div>
+        </div>
+        
+        <p class="text-danger font-medium">This deletes the project zip and database sql files. The action is irreversible.</p>
+      </div>
+      
+      <div class="modal-footer">
+        <button id="cancel-delete-btn" class="btn btn-secondary">Cancel</button>
+        <button id="confirm-delete-btn" class="btn btn-danger">Confirm Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Project Modal -->
+  <div class="modal-overlay" id="add-project-modal">
+    <div class="modal-box">
+      <div class="modal-header header-warning" style="background: linear-gradient(135deg, #1e40af, #3b82f6); border-color: #3b82f6;">
+        <div class="modal-icon text-white" style="color: white !important;">
+          <svg viewBox="0 0 24 24" width="24" height="24">
+            <path fill="currentColor" d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/>
+          </svg>
+        </div>
+        <h3>Add Project Mapping</h3>
+      </div>
+      
+      <div class="modal-content" style="padding-top: 20px;">
+        <p>Register a self-contained local project folder (e.g. <code>C:\ESSOP</code> or <code>C:\Podman\MyPools</code>) in the console.</p>
+        <div class="alert-box alert-info" style="margin: 14px 0; font-size: 13px;">
+          <strong>NOTE:</strong> The folder must already exist on your filesystem. The console will isolate settings inside its <code>.local/</code> directory and store snapshots inside <code>.snapshots/</code>.
+        </div>
+        <form id="add-project-form" class="action-form" onsubmit="event.preventDefault();">
+          <div class="form-group">
+            <label for="new-project-path">Absolute Folder Path</label>
+            <input type="text" id="new-project-path" placeholder="e.g. C:\ESSOP" required autocomplete="off" style="width: 100%; box-sizing: border-box;">
+          </div>
+        </form>
+      </div>
+      
+      <div class="modal-footer">
+        <button id="cancel-add-project-btn" class="btn btn-secondary">Cancel</button>
+        <button id="confirm-add-project-btn" class="btn btn-primary">Add Project</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Alert Notifications Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
