@@ -6,7 +6,7 @@ I have successfully generalized the Snapshot Recovery Console into a dynamic, mu
 
 ## 1. Summary of Changes
 
-We expanded the console application located at `C:\snapshots\`:
+We expanded the console application located at `C:\ESSOP\`:
 
 1. **Dynamic Project Registry**:
    - Added a persistent `projects.json` file to store paths for active projects.
@@ -53,7 +53,7 @@ graph TD
         end
     end
 
-    subgraph Console ["Snapshot Recovery Console (C:\snapshots)"]
+    subgraph Console ["Snapshot Recovery Console (C:\ESSOP)"]
         server["server.js (Node Backend)"]
         projects["projects.json (Project Registry)"]
         scripts["Automation Scripts (.ps1)"]
