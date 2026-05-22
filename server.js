@@ -238,6 +238,31 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // GET /api/fs/browse
+  if (pathname === '/api/fs/browse' && method === 'GET') {
+    const psScript = `
+      Add-Type -AssemblyName System.Windows.Forms;
+      $f = New-Object System.Windows.Forms.FolderBrowserDialog;
+      $f.Description = 'Select Project Folder';
+      $f.ShowNewFolderButton = $true;
+      $result = $f.ShowDialog((New-Object System.Windows.Forms.Form -Property @{TopMost=$true}));
+      if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        Write-Output $f.SelectedPath;
+      }
+    `;
+    exec(`powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "${psScript.replace(/\n/g, ' ')}"`, (err, stdout) => {
+      if (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to open directory browser: ' + err.message }));
+      } else {
+        const selectedPath = stdout.trim();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ path: selectedPath || null }));
+      }
+    });
+    return;
+  }
+
   // 2. GET /api/projects
   if (pathname === '/api/projects' && method === 'GET') {
     const projs = loadProjects();

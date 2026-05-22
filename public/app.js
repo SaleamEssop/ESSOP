@@ -1647,10 +1647,40 @@ if (gitSnapshotSelect) {
   gitSnapshotSelect.addEventListener('change', validateGitForm);
 }
 
+// Folder browser implementation
+async function browseFolder(targetInputEl) {
+  try {
+    const response = await fetch('/api/fs/browse');
+    if (response.ok) {
+      const data = await response.json();
+      if (data.path) {
+        targetInputEl.value = data.path;
+        targetInputEl.dispatchEvent(new Event('change', { bubbles: true }));
+        targetInputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    } else {
+      showToast('Server failed to open directory selector.', 'error');
+    }
+  } catch (err) {
+    showToast('Failed to contact server for directory browse.', 'error');
+  }
+}
+
 // --- Application Entry Point Initialize ---
 document.addEventListener('DOMContentLoaded', () => {
   loadProjects();
   loadSettings();
   initLogsStream();
   validateGitForm();
+
+  // Bind Browse buttons
+  const browseProjectPathBtn = document.getElementById('browse-project-path-btn');
+  if (browseProjectPathBtn && newProjectPath) {
+    browseProjectPathBtn.addEventListener('click', () => browseFolder(newProjectPath));
+  }
+
+  const browseSettingsGitRepoBtn = document.getElementById('browse-settings-git-repo-btn');
+  if (browseSettingsGitRepoBtn && settingsGitRepo) {
+    browseSettingsGitRepoBtn.addEventListener('click', () => browseFolder(settingsGitRepo));
+  }
 });

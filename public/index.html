@@ -420,7 +420,10 @@
                 <div class="form-row" style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px;">
                   <div class="form-group">
                     <label for="settings-git-repo">Local Repository Path</label>
-                    <input type="text" id="settings-git-repo" placeholder="e.g. C:\Podman\MyPools" required>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <input type="text" id="settings-git-repo" placeholder="e.g. C:\Podman\MyPools" required style="flex: 1; margin: 0;">
+                      <button type="button" id="browse-settings-git-repo-btn" class="btn btn-secondary" style="white-space: nowrap; padding: 8px 12px; height: 38px;">Browse...</button>
+                    </div>
                   </div>
                   <div class="form-group">
                     <label for="settings-git-branch">Deployment Branch</label>
@@ -919,7 +922,10 @@
           </div>
           <div class="form-group">
             <label for="new-project-path">Absolute Folder Path</label>
-            <input type="text" id="new-project-path" placeholder="e.g. C:\ESSOP" required autocomplete="off" style="width: 100%; box-sizing: border-box;">
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="new-project-path" placeholder="e.g. C:\ESSOP" required autocomplete="off" style="flex: 1; box-sizing: border-box; margin: 0;">
+              <button type="button" id="browse-project-path-btn" class="btn btn-secondary" style="white-space: nowrap; padding: 8px 12px; height: 38px;">Browse...</button>
+            </div>
           </div>
         </form>
       </div>
