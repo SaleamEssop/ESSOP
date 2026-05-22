@@ -55,9 +55,9 @@ function Get-ProjectSourcePath {
     }
 
     $known = @{
-        "mypools"        = "C:\Podman\MyPools"
-        "mycities"       = "C:\Docker\projects\mycities"
-        "deepseek-tunnel" = "C:\Podman\ngrok"
+        "mypools"        = "C:\mypools"
+        "mycities"       = "C:\mycities"
+        "deepseek-tunnel" = "C:\deepseek-tunnel"
     }
 
     if ($known.ContainsKey($Proj)) {
@@ -116,14 +116,14 @@ if (-not (Test-Path $composeFile)) { throw "compose.yml not found at $composeFil
 $envFilePath = if (Test-Path (Join-Path $Source ".env.local")) { Join-Path $Source ".env.local" } else { Join-Path $Source ".env" }
 
 $timestamp = Get-Date -Format "yyyy-MM-dd-HHmm"
-$snapsPath = Join-Path $Source ".snapshots"
+$snapsPath = Join-Path $Source "snapshots"
 $snapshotDir = Join-Path $snapsPath $timestamp
 New-Item -ItemType Directory -Path $snapshotDir -Force | Out-Null
 Write-Host "Snapshot: $snapshotDir" -ForegroundColor White
 
 # Update gitignore
 $gitignorePath = Join-Path $Source ".gitignore"
-$ignoreEntries = @(".snapshots/", ".local/")
+$ignoreEntries = @("snapshots/", ".snapshots/", ".local/")
 if (Test-Path $gitignorePath) {
     $content = Get-Content $gitignorePath
     $toAppend = @()
@@ -265,6 +265,7 @@ $excludeDirs = @(
     "wp-content\cache",
     "wp-content\upgrade",
     ".local",
+    "snapshots",
     ".snapshots",
     "secrets",
     "backups",
@@ -420,7 +421,7 @@ if ($wasStopped) {
 }
 
 # ── Step 6: Update active.txt ───────────────────────────────
-$activeFile = Join-Path $Source ".snapshots\active.txt"
+$activeFile = Join-Path $Source "snapshots\active.txt"
 $timestamp | Out-File -FilePath $activeFile -Encoding UTF8 -NoNewline
 
 # ── Step 7: Refresh registry ─────────────────────────────────

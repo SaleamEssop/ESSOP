@@ -313,7 +313,9 @@ function DeleteSelected {
   }
   
   $targetDir = ""
-  if ($projPath -and (Test-Path (Join-Path $projPath ".snapshots\$name"))) {
+  if ($projPath -and (Test-Path (Join-Path $projPath "snapshots\$name"))) {
+    $targetDir = Join-Path $projPath "snapshots\$name"
+  } elseif ($projPath -and (Test-Path (Join-Path $projPath ".snapshots\$name"))) {
     $targetDir = Join-Path $projPath ".snapshots\$name"
   } else {
     $targetDir = Join-Path $SnapshotsRoot "$script:ActiveProject\$name"

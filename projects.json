@@ -1,10 +1,6 @@
 [
   {
-    "name": "mypools",
-    "path": "C:\\Podman\\MyPools"
-  },
-  {
-    "name": "ESSOP",
-    "path": "C:\\ESSOP"
+    "name": "MyPools",
+    "path": "C:\\mypools"
   }
 ]

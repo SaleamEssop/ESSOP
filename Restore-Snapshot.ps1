@@ -45,9 +45,9 @@ function Get-ProjectSourcePath {
     }
 
     $known = @{
-        "mypools"        = "C:\Podman\MyPools"
-        "mycities"       = "C:\Docker\projects\mycities"
-        "deepseek-tunnel" = "C:\Podman\ngrok"
+        "mypools"        = "C:\mypools"
+        "mycities"       = "C:\mycities"
+        "deepseek-tunnel" = "C:\deepseek-tunnel"
     }
 
     if ($known.ContainsKey($Proj)) {
@@ -60,8 +60,12 @@ function Get-ProjectSourcePath {
 
 $Source = Get-ProjectSourcePath -Proj $Project
 
-# Try local .snapshots folder first
-$projectSnapshotDir = Join-Path $Source ".snapshots"
+# Try local snapshots folder first
+$projectSnapshotDir = Join-Path $Source "snapshots"
+if (-not (Test-Path $projectSnapshotDir)) {
+    # Try .snapshots for backward compatibility
+    $projectSnapshotDir = Join-Path $Source ".snapshots"
+}
 if (-not (Test-Path $projectSnapshotDir)) {
     # Fallback to C:\snapshots\<Project>
     $projectSnapshotDir = Join-Path $SnapshotsRoot $Project

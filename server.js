@@ -315,8 +315,8 @@ const server = http.createServer((req, res) => {
         projs.push({ name, path: targetPath });
         saveProjects(projs);
 
-        // Make sure the project has a .snapshots folder and a .local folder
-        const snapsPath = path.join(targetPath, '.snapshots');
+        // Make sure the project has a snapshots folder and a .local folder
+        const snapsPath = path.join(targetPath, 'snapshots');
         if (!fs.existsSync(snapsPath)) {
           fs.mkdirSync(snapsPath, { recursive: true });
         }
@@ -1087,11 +1087,15 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ error: 'Project path not found' }));
       return;
     }
-    const targetDir = path.join(projectPath, '.snapshots', name);
+    let snapsDir = 'snapshots';
+    if (!fs.existsSync(path.join(projectPath, 'snapshots', name)) && fs.existsSync(path.join(projectPath, '.snapshots', name))) {
+      snapsDir = '.snapshots';
+    }
+    const targetDir = path.join(projectPath, snapsDir, name);
 
-    // Safety check: ensure targetDir is within projectPath\.snapshots
+    // Safety check: ensure targetDir is within projectPath\snapshots or projectPath\.snapshots
     const resolvedPath = path.resolve(targetDir);
-    const expectedPrefix = path.resolve(path.join(projectPath, '.snapshots'));
+    const expectedPrefix = path.resolve(path.join(projectPath, snapsDir));
     if (!resolvedPath.startsWith(expectedPrefix)) {
       res.writeHead(403, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Access denied: unsafe path' }));
