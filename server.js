@@ -253,12 +253,32 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        const targetPath = payload.path ? path.resolve(payload.path.trim()) : '';
+        let targetPath = payload.path ? payload.path.trim() : '';
         
-        if (!targetPath || !fs.existsSync(targetPath)) {
+        if (!targetPath) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Folder path does not exist on local filesystem.' }));
+          res.end(JSON.stringify({ error: 'Folder path is required.' }));
           return;
+        }
+
+        // Try to resolve path
+        try {
+          targetPath = path.resolve(targetPath);
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid folder path format.' }));
+          return;
+        }
+
+        // Create folder recursively if it doesn't exist
+        if (!fs.existsSync(targetPath)) {
+          try {
+            fs.mkdirSync(targetPath, { recursive: true });
+          } catch (mkdirErr) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Folder path does not exist and could not be created: ${mkdirErr.message}` }));
+            return;
+          }
         }
 
         const stats = fs.statSync(targetPath);
@@ -268,17 +288,27 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        const name = path.basename(targetPath) || 'unknown';
+        // Use custom name if provided, otherwise fallback to folder basename
+        let name = payload.name ? payload.name.trim() : '';
+        if (!name) {
+          name = path.basename(targetPath) || 'unknown';
+        }
+
         if (!/^[a-zA-Z0-9_\-]+$/.test(name)) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Folder name contains invalid characters. Use alphanumeric, dash, or underscore.' }));
+          res.end(JSON.stringify({ error: 'Project name contains invalid characters. Use alphanumeric, dash, or underscore.' }));
           return;
         }
 
         const projs = loadProjects();
-        if (projs.some(p => p.name.toLowerCase() === name.toLowerCase() || p.path.toLowerCase() === targetPath.toLowerCase())) {
+        if (projs.some(p => p.name.toLowerCase() === name.toLowerCase())) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Project name or path already registered.' }));
+          res.end(JSON.stringify({ error: `Project name "${name}" is already registered. Please specify a unique name.` }));
+          return;
+        }
+        if (projs.some(p => p.path.toLowerCase() === targetPath.toLowerCase())) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Folder path is already registered under another project.' }));
           return;
         }
 

@@ -17,6 +17,7 @@ const addProjectModal = document.getElementById('add-project-modal');
 const cancelAddProjectBtn = document.getElementById('cancel-add-project-btn');
 const confirmAddProjectBtn = document.getElementById('confirm-add-project-btn');
 const newProjectPath = document.getElementById('new-project-path');
+const newProjectName = document.getElementById('new-project-name');
 const currentTabTitle = document.getElementById('current-tab-title');
 const navItems = document.querySelectorAll('.nav-item');
 const tabPanels = document.querySelectorAll('.tab-panel');
@@ -1526,6 +1527,7 @@ if (runParityBtn) {
 if (addProjectBtn) {
   addProjectBtn.addEventListener('click', () => {
     if (newProjectPath) newProjectPath.value = '';
+    if (newProjectName) newProjectName.value = '';
     if (addProjectModal) addProjectModal.classList.add('active');
   });
 }
@@ -1539,6 +1541,7 @@ if (cancelAddProjectBtn) {
 if (confirmAddProjectBtn) {
   confirmAddProjectBtn.addEventListener('click', async () => {
     const pathVal = newProjectPath ? newProjectPath.value.trim() : '';
+    const nameVal = newProjectName ? newProjectName.value.trim() : '';
     if (!pathVal) {
       showToast('Project folder path is required.', 'warning');
       return;
@@ -1551,18 +1554,22 @@ if (confirmAddProjectBtn) {
       const response = await fetch('/api/projects/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: pathVal })
+        body: JSON.stringify({ path: pathVal, name: nameVal })
       });
       
       if (response.ok) {
         showToast('Project mapping added successfully!', 'success');
         if (addProjectModal) addProjectModal.classList.remove('active');
         
-        // Auto-select newly added project based on its folder name
-        const pathParts = pathVal.replace(/\\/g, '/').split('/');
-        const nameCandidate = pathParts.pop() || pathParts.pop();
-        if (nameCandidate) {
-          currentProject = nameCandidate;
+        // Auto-select newly added project
+        if (nameVal) {
+          currentProject = nameVal;
+        } else {
+          const pathParts = pathVal.replace(/\\/g, '/').split('/');
+          const nameCandidate = pathParts.pop() || pathParts.pop();
+          if (nameCandidate) {
+            currentProject = nameCandidate;
+          }
         }
         
         await loadProjects();
@@ -1588,6 +1595,15 @@ if (newProjectPath) {
   });
 }
 
+if (newProjectName) {
+  newProjectName.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (confirmAddProjectBtn) confirmAddProjectBtn.click();
+    }
+  });
+}
+
 if (deleteProjectBtn) {
   deleteProjectBtn.addEventListener('click', async () => {
     if (!currentProject) {
@@ -1595,12 +1611,12 @@ if (deleteProjectBtn) {
       return;
     }
     
+    let confirmMsg = `Are you sure you want to remove project "${currentProject}" from the console?\nThis will not delete the project files or snapshots on disk, just the mapping in this dashboard.`;
     if (currentProject.toLowerCase() === 'mypools') {
-      showToast('The default project "mypools" cannot be deleted.', 'warning');
-      return;
+      confirmMsg = `WARNING: You are removing the default "mypools" project mapping.\n\n${confirmMsg}`;
     }
     
-    const confirmRemove = confirm(`Are you sure you want to remove project "${currentProject}" from the console?\nThis will not delete the project files or snapshots on disk, just the mapping in this dashboard.`);
+    const confirmRemove = confirm(confirmMsg);
     if (!confirmRemove) return;
     
     deleteProjectBtn.disabled = true;
