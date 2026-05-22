@@ -5,13 +5,13 @@ const { spawn, exec } = require('child_process');
 const url = require('url');
 
 const PORT = 3050;
-const SNAPSHOTS_ROOT = __dirname;
+const SNAPSHOTS_ROOT = 'C:\\snapshots';
 const PROJECTS_FILE = path.join(SNAPSHOTS_ROOT, 'projects.json');
 
 function loadProjects() {
   if (!fs.existsSync(PROJECTS_FILE)) {
     const defaultProjects = [
-      { name: path.basename(SNAPSHOTS_ROOT), path: SNAPSHOTS_ROOT }
+      { name: 'mypools', path: 'C:\\Podman\\MyPools' }
     ];
     try {
       fs.mkdirSync(SNAPSHOTS_ROOT, { recursive: true });
@@ -121,9 +121,9 @@ function runPowerShellScript(scriptFile, args) {
   const isRestore = scriptFile.toLowerCase().includes('restore');
   activeTask.type = isCreate ? 'create' : (isRestore ? 'restore' : 'deploy');
   
+  // Find project argument
   const projIdx = args.indexOf('-Project');
-  const defaultProj = (loadProjects()[0] || { name: 'mypools' }).name;
-  activeTask.project = projIdx !== -1 ? args[projIdx + 1] : (activeTask.type === 'deploy' ? defaultProj : 'unknown');
+  activeTask.project = projIdx !== -1 ? args[projIdx + 1] : (activeTask.type === 'deploy' ? 'mypools' : 'unknown');
   
   logBuffer = [];
   stdoutAccumulator = '';
@@ -278,32 +278,12 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        let targetPath = payload.path ? payload.path.trim() : '';
+        const targetPath = payload.path ? path.resolve(payload.path.trim()) : '';
         
-        if (!targetPath) {
+        if (!targetPath || !fs.existsSync(targetPath)) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Folder path is required.' }));
+          res.end(JSON.stringify({ error: 'Folder path does not exist on local filesystem.' }));
           return;
-        }
-
-        // Try to resolve path
-        try {
-          targetPath = path.resolve(targetPath);
-        } catch (e) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid folder path format.' }));
-          return;
-        }
-
-        // Create folder recursively if it doesn't exist
-        if (!fs.existsSync(targetPath)) {
-          try {
-            fs.mkdirSync(targetPath, { recursive: true });
-          } catch (mkdirErr) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: `Folder path does not exist and could not be created: ${mkdirErr.message}` }));
-            return;
-          }
         }
 
         const stats = fs.statSync(targetPath);
@@ -313,35 +293,25 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        // Use custom name if provided, otherwise fallback to folder basename
-        let name = payload.name ? payload.name.trim() : '';
-        if (!name) {
-          name = path.basename(targetPath) || 'unknown';
-        }
-
+        const name = path.basename(targetPath) || 'unknown';
         if (!/^[a-zA-Z0-9_\-]+$/.test(name)) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Project name contains invalid characters. Use alphanumeric, dash, or underscore.' }));
+          res.end(JSON.stringify({ error: 'Folder name contains invalid characters. Use alphanumeric, dash, or underscore.' }));
           return;
         }
 
         const projs = loadProjects();
-        if (projs.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+        if (projs.some(p => p.name.toLowerCase() === name.toLowerCase() || p.path.toLowerCase() === targetPath.toLowerCase())) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `Project name "${name}" is already registered. Please specify a unique name.` }));
-          return;
-        }
-        if (projs.some(p => p.path.toLowerCase() === targetPath.toLowerCase())) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Folder path is already registered under another project.' }));
+          res.end(JSON.stringify({ error: 'Project name or path already registered.' }));
           return;
         }
 
         projs.push({ name, path: targetPath });
         saveProjects(projs);
 
-        // Make sure the project has a snapshots folder and a .local folder
-        const snapsPath = path.join(targetPath, 'snapshots');
+        // Make sure the project has a .snapshots folder and a .local folder
+        const snapsPath = path.join(targetPath, '.snapshots');
         if (!fs.existsSync(snapsPath)) {
           fs.mkdirSync(snapsPath, { recursive: true });
         }
@@ -351,8 +321,7 @@ const server = http.createServer((req, res) => {
         }
 
         // Trigger registry refresh
-        const refreshScript = path.join(SNAPSHOTS_ROOT, 'Refresh-Registry.ps1');
-        exec(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${refreshScript}"`, () => {
+        exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\snapshots\\Refresh-Registry.ps1', () => {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, projects: projs.map(p => p.name), details: projs }));
         });
@@ -385,8 +354,7 @@ const server = http.createServer((req, res) => {
     saveProjects(projs);
 
     // Trigger registry refresh
-    const refreshScript = path.join(SNAPSHOTS_ROOT, 'Refresh-Registry.ps1');
-    exec(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${refreshScript}"`, () => {
+    exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\snapshots\\Refresh-Registry.ps1', () => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, projects: projs.map(p => p.name), details: projs }));
     });
@@ -403,8 +371,7 @@ const server = http.createServer((req, res) => {
     }
 
     // First trigger Refresh-Registry.ps1 to make sure json is completely updated
-    const refreshScript = path.join(SNAPSHOTS_ROOT, 'Refresh-Registry.ps1');
-    exec(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${refreshScript}"`, (err) => {
+    exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\snapshots\\Refresh-Registry.ps1', (err) => {
       if (err) {
         console.error('Refresh-Registry.ps1 failed', err);
       }
@@ -484,8 +451,7 @@ const server = http.createServer((req, res) => {
 
   // 3c. GET /api/git/status
   if (pathname === '/api/git/status' && method === 'GET') {
-    const defaultProj = (loadProjects()[0] || { name: 'mypools' }).name;
-    const project = parsedUrl.query.project || defaultProj;
+    const project = parsedUrl.query.project || 'mypools';
     const gitRepoPath = getProjectPath(project);
     if (!gitRepoPath || !fs.existsSync(gitRepoPath)) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -543,16 +509,30 @@ const server = http.createServer((req, res) => {
           return;
         }
 
+        let retentionCount = 0;
+        const projectPath = getProjectPath(project);
+        if (projectPath) {
+          const settingsPath = path.join(projectPath, '.local', 'settings.json');
+          if (fs.existsSync(settingsPath)) {
+            try {
+              const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+              retentionCount = parseInt(settings.retentionCount, 10) || 0;
+            } catch (e) {}
+          }
+        }
+
         const args = ['-Project', project, '-Description', description || 'Manual snapshot'];
         if (live) args.push('-Live');
         if (noDb) args.push('-NoDatabase');
+        if (retentionCount > 0) {
+          args.push('-RetentionCount', retentionCount.toString());
+        }
         if (excludePaths) {
           const excludesStr = Array.isArray(excludePaths) ? excludePaths.join(',') : excludePaths;
           if (excludesStr) {
             args.push('-ExcludePaths', excludesStr);
           }
         }
-        const projectPath = getProjectPath(project);
         if (projectPath) {
           args.push('-SourcePath', projectPath);
         }
@@ -636,8 +616,7 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        const defaultProj = (loadProjects()[0] || { name: 'mypools' }).name;
-        const activeProject = project || defaultProj;
+        const activeProject = project || 'mypools';
         const projectPath = getProjectPath(activeProject);
         if (!projectPath) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -669,8 +648,7 @@ const server = http.createServer((req, res) => {
 
   // 5bb. GET /api/parity/check
   if (pathname === '/api/parity/check' && method === 'GET') {
-    const defaultProj = (loadProjects()[0] || { name: 'mypools' }).name;
-    const project = parsedUrl.query.project || defaultProj;
+    const project = parsedUrl.query.project || 'mypools';
     const localRepo = getProjectPath(project);
     if (!localRepo || !fs.existsSync(localRepo)) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -680,17 +658,14 @@ const server = http.createServer((req, res) => {
     const settingsPath = path.join(localRepo, '.local', 'settings.json');
     const secretPath = path.join(localRepo, '.local', 'ssh.secret.txt');
 
-    const isMyPools = project.toLowerCase() === 'mypools';
     let settings = {
-      sshHost: isMyPools ? '152.42.220.5' : '152.42.220.6',
+      sshHost: '152.42.220.5',
       sshUser: 'root',
       sshPassword: '',
-      sshHostKey: isMyPools 
-        ? 'SHA256:ZJmY20MEfjIPQ9I3uWA4Thql8y70nQxjY6za9LMiDBg' 
-        : 'SHA256:ai+BPKWKn3SjOimurq2kf9HK60XZluOMSWEFiINKMLk',
+      sshHostKey: 'SHA256:ZJmY20MEfjIPQ9I3uWA4Thql8y70nQxjY6za9LMiDBg',
       gitRepo: localRepo,
       gitBranch: 'main',
-      siteUrl: isMyPools ? 'https://mypools.co.za' : `https://${project.toLowerCase()}.co.za`
+      siteUrl: 'https://mypools.co.za'
     };
 
     if (fs.existsSync(secretPath)) {
@@ -709,8 +684,8 @@ const server = http.createServer((req, res) => {
 
     const localComposeProject = getComposeProjectName(localRepo, `${project}-local`);
     const remoteComposeProject = getComposeProjectName(localRepo, `${project}-pod`);
-    const siteUrl = settings.siteUrl || (isMyPools ? 'https://mypools.co.za' : `https://${project.toLowerCase()}.co.za`);
-    const siteDomain = url.parse(siteUrl).hostname || (isMyPools ? 'mypools.co.za' : `${project.toLowerCase()}.co.za`);
+    const siteUrl = settings.siteUrl || 'https://mypools.co.za';
+    const siteDomain = url.parse(siteUrl).hostname || 'mypools.co.za';
     const vpsInstallRoot = settings.vpsInstallRoot || `/opt/${project.toLowerCase()}`;
 
     // Function to run SSH command via plink
@@ -718,7 +693,7 @@ const server = http.createServer((req, res) => {
       return new Promise((resolve) => {
         const plinkTool = fs.existsSync(path.join(localRepo, 'tools', 'plink.exe')) 
           ? path.join(localRepo, 'tools', 'plink.exe') 
-          : (fs.existsSync(path.join(SNAPSHOTS_ROOT, 'tools', 'plink.exe')) ? path.join(SNAPSHOTS_ROOT, 'tools', 'plink.exe') : 'plink.exe');
+          : (fs.existsSync('C:\\snapshots\\tools\\plink.exe') ? 'C:\\snapshots\\tools\\plink.exe' : 'plink.exe');
         const escapedCmd = cmd.replace(/"/g, '\\"');
         const plinkCmd = `"${plinkTool}" -ssh ${settings.sshUser}@${settings.sshHost} -batch -hostkey "${settings.sshHostKey}" -pw "${settings.sshPassword}" "${escapedCmd}"`;
         
@@ -976,8 +951,7 @@ const server = http.createServer((req, res) => {
 
   // 5c. GET /api/settings
   if (pathname === '/api/settings' && method === 'GET') {
-    const defaultProj = (loadProjects()[0] || { name: 'mypools' }).name;
-    const project = parsedUrl.query.project || defaultProj;
+    const project = parsedUrl.query.project || 'mypools';
     const localRepo = getProjectPath(project);
     if (!localRepo || !fs.existsSync(localRepo)) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -987,18 +961,16 @@ const server = http.createServer((req, res) => {
     const settingsPath = path.join(localRepo, '.local', 'settings.json');
     const secretPath = path.join(localRepo, '.local', 'ssh.secret.txt');
 
-    const isMyPools = project.toLowerCase() === 'mypools';
     let settings = {
-      sshHost: isMyPools ? '152.42.220.5' : '152.42.220.6',
+      sshHost: '152.42.220.5',
       sshUser: 'root',
       sshPassword: '',
-      sshHostKey: isMyPools 
-        ? 'SHA256:ZJmY20MEfjIPQ9I3uWA4Thql8y70nQxjY6za9LMiDBg' 
-        : 'SHA256:ai+BPKWKn3SjOimurq2kf9HK60XZluOMSWEFiINKMLk',
+      sshHostKey: 'SHA256:ZJmY20MEfjIPQ9I3uWA4Thql8y70nQxjY6za9LMiDBg',
       gitRepo: localRepo,
       gitBranch: 'main',
-      siteUrl: isMyPools ? 'https://mypools.co.za' : `https://${project.toLowerCase()}.co.za`,
-      vpsInstallRoot: `/opt/${project.toLowerCase()}`
+      siteUrl: 'https://mypools.co.za',
+      vpsInstallRoot: `/opt/${project.toLowerCase()}`,
+      retentionCount: 0
     };
 
     // Fallback password from ssh.secret.txt
@@ -1032,10 +1004,9 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        const { project, sshHost, sshUser, sshPassword, sshHostKey, gitBranch, siteUrl, vpsInstallRoot } = payload;
+        const { project, sshHost, sshUser, sshPassword, sshHostKey, gitBranch, siteUrl, vpsInstallRoot, retentionCount } = payload;
 
-        const defaultProj = (loadProjects()[0] || { name: 'mypools' }).name;
-        const activeProject = project || defaultProj;
+        const activeProject = project || 'mypools';
         const localRepo = getProjectPath(activeProject);
         if (!localRepo || !fs.existsSync(localRepo)) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -1052,18 +1023,16 @@ const server = http.createServer((req, res) => {
         const settingsPath = path.join(localDir, 'settings.json');
         const secretPath = path.join(localDir, 'ssh.secret.txt');
 
-        const isMyPools = activeProject.toLowerCase() === 'mypools';
         const settings = {
-          sshHost: sshHost || (isMyPools ? '152.42.220.5' : '152.42.220.6'),
+          sshHost: sshHost || '152.42.220.5',
           sshUser: sshUser || 'root',
           sshPassword: sshPassword || '',
-          sshHostKey: sshHostKey || (isMyPools 
-            ? 'SHA256:ZJmY20MEfjIPQ9I3uWA4Thql8y70nQxjY6za9LMiDBg' 
-            : 'SHA256:ai+BPKWKn3SjOimurq2kf9HK60XZluOMSWEFiINKMLk'),
+          sshHostKey: sshHostKey || 'SHA256:ZJmY20MEfjIPQ9I3uWA4Thql8y70nQxjY6za9LMiDBg',
           gitRepo: localRepo,
           gitBranch: gitBranch || 'main',
-          siteUrl: siteUrl || (isMyPools ? 'https://mypools.co.za' : `https://${activeProject.toLowerCase()}.co.za`),
-          vpsInstallRoot: vpsInstallRoot || `/opt/${activeProject.toLowerCase()}`
+          siteUrl: siteUrl || 'https://mypools.co.za',
+          vpsInstallRoot: vpsInstallRoot || `/opt/${activeProject.toLowerCase()}`,
+          retentionCount: parseInt(retentionCount, 10) || 0
         };
 
         // Write settings.json
@@ -1112,15 +1081,11 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ error: 'Project path not found' }));
       return;
     }
-    let snapsDir = 'snapshots';
-    if (!fs.existsSync(path.join(projectPath, 'snapshots', name)) && fs.existsSync(path.join(projectPath, '.snapshots', name))) {
-      snapsDir = '.snapshots';
-    }
-    const targetDir = path.join(projectPath, snapsDir, name);
+    const targetDir = path.join(projectPath, '.snapshots', name);
 
-    // Safety check: ensure targetDir is within projectPath\snapshots or projectPath\.snapshots
+    // Safety check: ensure targetDir is within projectPath\.snapshots
     const resolvedPath = path.resolve(targetDir);
-    const expectedPrefix = path.resolve(path.join(projectPath, snapsDir));
+    const expectedPrefix = path.resolve(path.join(projectPath, '.snapshots'));
     if (!resolvedPath.startsWith(expectedPrefix)) {
       res.writeHead(403, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Access denied: unsafe path' }));
@@ -1135,13 +1100,359 @@ const server = http.createServer((req, res) => {
       }
 
       // Re-run registry refresh
-      const refreshScript = path.join(SNAPSHOTS_ROOT, 'Refresh-Registry.ps1');
-      exec(`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${refreshScript}"`, (refreshErr) => {
+      exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\snapshots\\Refresh-Registry.ps1', (refreshErr) => {
         if (refreshErr) {
           console.error('Refresh-Registry.ps1 failed after delete', refreshErr);
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: `Snapshot ${name} deleted successfully` }));
+      });
+    });
+    return;
+  }
+
+  // GET /api/project/check-ports
+  if (pathname === '/api/project/check-ports' && method === 'GET') {
+    const project = parsedUrl.query.project || 'mypools';
+    const projectPath = getProjectPath(project);
+    if (!projectPath || !fs.existsSync(projectPath)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Project directory not found' }));
+      return;
+    }
+
+    // Helper functions
+    const readEnvFiles = (projPath) => {
+      const envs = {};
+      const files = ['.env', '.env.local'];
+      for (const f of files) {
+        const fp = path.join(projPath, f);
+        if (fs.existsSync(fp)) {
+          try {
+            const content = fs.readFileSync(fp, 'utf8');
+            content.split('\n').forEach(line => {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith('#')) return;
+              const eqIdx = trimmed.indexOf('=');
+              if (eqIdx !== -1) {
+                const key = trimmed.substring(0, eqIdx).trim();
+                const val = trimmed.substring(eqIdx + 1).trim().replace(/['"]/g, '');
+                envs[key] = val;
+              }
+            });
+          } catch (e) {}
+        }
+      }
+      return envs;
+    };
+
+    const resolveEnvValue = (expr, envs) => {
+      const match = expr.match(/\${([A-Za-z0-9_]+)(?::-([^}]+))?}/);
+      if (match) {
+        const varName = match[1];
+        const defaultValue = match[2] || '';
+        if (envs[varName] !== undefined) {
+          return envs[varName];
+        }
+        return defaultValue;
+      }
+      return expr;
+    };
+
+    // 1. Load envs
+    const envs = readEnvFiles(projectPath);
+
+    // 2. Find and parse compose file ports
+    const composeFiles = ['compose.yml', 'docker-compose.yml', 'compose.edge.yml', 'podman-compose.yml'];
+    const foundPorts = new Set();
+    const portMappings = [];
+
+    for (const file of composeFiles) {
+      const filePath = path.join(projectPath, file);
+      if (fs.existsSync(filePath)) {
+        try {
+          const content = fs.readFileSync(filePath, 'utf8');
+          const lines = content.split('\n');
+          let inPorts = false;
+          let indent = 0;
+          let currentService = 'unknown';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+
+            const leadingSpaces = line.length - line.trimStart().length;
+
+            if (leadingSpaces === 2 && trimmed.endsWith(':') && !trimmed.startsWith('-')) {
+              currentService = trimmed.substring(0, trimmed.length - 1).trim();
+            }
+
+            if (inPorts) {
+              if (leadingSpaces > indent && trimmed.startsWith('-')) {
+                const portSpec = trimmed.substring(1).trim().replace(/['"]/g, '');
+                const parts = portSpec.split(':');
+                let hostPortExpr = '';
+                let containerPort = '';
+                if (parts.length === 3) {
+                  hostPortExpr = parts[1];
+                  containerPort = parts[2];
+                } else if (parts.length === 2) {
+                  hostPortExpr = parts[0];
+                  containerPort = parts[1];
+                } else if (parts.length === 1) {
+                  hostPortExpr = parts[0];
+                  containerPort = parts[0];
+                }
+
+                const resolvedHostPort = resolveEnvValue(hostPortExpr.trim(), envs);
+                const portNum = parseInt(resolvedHostPort, 10);
+                if (!isNaN(portNum)) {
+                  foundPorts.add(portNum);
+                  portMappings.push({
+                    port: portNum,
+                    raw: portSpec,
+                    service: currentService,
+                    containerPort: containerPort,
+                    file: file
+                  });
+                }
+              } else if (leadingSpaces <= indent) {
+                inPorts = false;
+              }
+            }
+
+            if (trimmed.startsWith('ports:')) {
+              inPorts = true;
+              indent = leadingSpaces;
+            }
+          }
+        } catch (e) {
+          console.error(`Failed to parse compose file ${file}`, e);
+        }
+      }
+    }
+
+    const portsToCheck = Array.from(foundPorts);
+    if (portsToCheck.length === 0) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ports: [] }));
+      return;
+    }
+
+    // 3. Check port availability using net sockets
+    const net = require('net');
+    const checkPromises = portsToCheck.map(port => {
+      return new Promise((resolve) => {
+        const testServer = net.createServer();
+        testServer.once('error', (err) => {
+          if (err.code === 'EADDRINUSE') {
+            resolve({ port, free: false });
+          } else {
+            resolve({ port, free: true });
+          }
+        });
+        testServer.once('listening', () => {
+          testServer.close(() => {
+            resolve({ port, free: true });
+          });
+        });
+        testServer.listen(port, '127.0.0.1');
+      });
+    });
+
+    Promise.all(checkPromises).then(results => {
+      const mappedResults = portMappings.map(mapping => {
+        const check = results.find(r => r.port === mapping.port);
+        return {
+          ...mapping,
+          free: check ? check.free : true
+        };
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ports: mappedResults }));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Port checking failed: ' + err.message }));
+    });
+    return;
+  }
+
+  // GET /api/containers/stats
+  if (pathname === '/api/containers/stats' && method === 'GET') {
+    const project = parsedUrl.query.project || 'mypools';
+    const projectPath = getProjectPath(project);
+    if (!projectPath || !fs.existsSync(projectPath)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Project directory not found' }));
+      return;
+    }
+
+    const composeProjectName = getComposeProjectName(projectPath, `${project}-local`);
+
+    exec('podman stats --no-stream --format "{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}|{{.NetIO}}"', (err, stdout, stderr) => {
+      if (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to run podman stats: ' + err.message }));
+        return;
+      }
+
+      const lines = (stdout || '').trim().split('\n').filter(Boolean);
+      const stats = [];
+      for (const line of lines) {
+        const parts = line.split('|');
+        if (parts.length === 5) {
+          const name = parts[0].trim();
+          const isProjectContainer = name.toLowerCase().startsWith(composeProjectName.toLowerCase()) || 
+                                     name.toLowerCase().includes(project.toLowerCase());
+          if (isProjectContainer) {
+            stats.push({
+              name,
+              cpu: parts[1].trim(),
+              memUsage: parts[2].trim(),
+              memPerc: parts[3].trim(),
+              netIo: parts[4].trim()
+            });
+          }
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ stats }));
+    });
+    return;
+  }
+
+  // GET /api/git/diff-preview
+  if (pathname === '/api/git/diff-preview' && method === 'GET') {
+    const project = parsedUrl.query.project || 'mypools';
+    const snapshotName = parsedUrl.query.snapshotName;
+    if (!snapshotName) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing snapshotName parameter' }));
+      return;
+    }
+
+    const localRepo = getProjectPath(project);
+    if (!localRepo || !fs.existsSync(localRepo)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Project local repository not found' }));
+      return;
+    }
+
+    // 1. Read metadata of snapshot
+    const snapshotDir = path.join(localRepo, '.snapshots', snapshotName);
+    const snapMetadataPath = path.join(snapshotDir, 'snapshot.json');
+    if (!fs.existsSync(snapMetadataPath)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: `Snapshot metadata not found for ${snapshotName}` }));
+      return;
+    }
+
+    let snapshotCommit = '';
+    try {
+      const snapMetadata = JSON.parse(fs.readFileSync(snapMetadataPath, 'utf8'));
+      snapshotCommit = snapMetadata.git_commit || '';
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to read snapshot metadata: ' + e.message }));
+      return;
+    }
+
+    if (!snapshotCommit) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No Git commit hash recorded in this snapshot' }));
+      return;
+    }
+
+    // 2. Fetch vpsCommit by reading settings and running plink SSH query
+    const settingsPath = path.join(localRepo, '.local', 'settings.json');
+    const secretPath = path.join(localRepo, '.local', 'ssh.secret.txt');
+
+    let settings = {
+      sshHost: '152.42.220.5',
+      sshUser: 'root',
+      sshPassword: '',
+      sshHostKey: 'SHA256:ZJmY20MEfjIPQ9I3uWA4Thql8y70nQxjY6za9LMiDBg',
+      vpsInstallRoot: `/opt/${project.toLowerCase()}`
+    };
+
+    if (fs.existsSync(secretPath)) {
+      try { settings.sshPassword = fs.readFileSync(secretPath, 'utf8').trim(); } catch (e) {}
+    }
+    if (fs.existsSync(settingsPath)) {
+      try {
+        const fileData = fs.readFileSync(settingsPath, 'utf8');
+        settings = { ...settings, ...JSON.parse(fileData) };
+      } catch (e) {}
+    }
+
+    const runSsh = (cmd) => {
+      return new Promise((resolve) => {
+        const plinkTool = fs.existsSync(path.join(localRepo, 'tools', 'plink.exe')) 
+          ? path.join(localRepo, 'tools', 'plink.exe') 
+          : (fs.existsSync('C:\\snapshots\\tools\\plink.exe') ? 'C:\\snapshots\\tools\\plink.exe' : 'plink.exe');
+        const escapedCmd = cmd.replace(/"/g, '\\"');
+        const plinkCmd = `"${plinkTool}" -ssh ${settings.sshUser}@${settings.sshHost} -batch -hostkey "${settings.sshHostKey}" -pw "${settings.sshPassword}" "${escapedCmd}"`;
+        
+        exec(plinkCmd, { timeout: 10000 }, (error, stdout) => {
+          if (error) {
+            resolve('');
+          } else {
+            resolve(stdout.trim());
+          }
+        });
+      });
+    };
+
+    const vpsInstallRoot = settings.vpsInstallRoot || `/opt/${project.toLowerCase()}`;
+
+    runSsh(`cat ${vpsInstallRoot}/deploy-status.json 2>/dev/null || git -C ${vpsInstallRoot} log -1 --format=%H`).then(vpsCommitRaw => {
+      let vpsCommit = vpsCommitRaw.trim();
+      if (vpsCommit.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(vpsCommit);
+          vpsCommit = parsed.commit || vpsCommit;
+        } catch (e) {}
+      }
+
+      if (!vpsCommit || !/^[a-f0-9]+$/i.test(vpsCommit)) {
+        // VPS commit not reachable/unknown, fallback to diffing against HEAD
+        exec(`git -C "${localRepo}" diff --stat HEAD ${snapshotCommit}`, (err, stdout, stderr) => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            vpsCommit: 'unknown',
+            snapshotCommit,
+            diff: stdout ? stdout.trim() : (err ? `Git error: ${stderr || err.message}` : 'No changes'),
+            isFallback: true
+          }));
+        });
+        return;
+      }
+
+      // VPS commit successfully retrieved, run diff
+      exec(`git -C "${localRepo}" diff --stat ${vpsCommit} ${snapshotCommit}`, (diffErr, diffStdout, diffStderr) => {
+        if (diffErr) {
+          // Fallback to diffing against HEAD
+          exec(`git -C "${localRepo}" diff --stat HEAD ${snapshotCommit}`, (fallbackErr, fallbackStdout, fallbackStderr) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              vpsCommit,
+              snapshotCommit,
+              diff: fallbackStdout ? fallbackStdout.trim() : (fallbackErr ? `Git error: ${fallbackStderr || fallbackErr.message}` : 'No changes'),
+              isFallback: true,
+              warning: `VPS commit ${vpsCommit} is missing from local history; showing diff against local HEAD instead.`
+            }));
+          });
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            vpsCommit,
+            snapshotCommit,
+            diff: diffStdout ? diffStdout.trim() : 'No changes',
+            isFallback: false
+          }));
+        }
       });
     });
     return;

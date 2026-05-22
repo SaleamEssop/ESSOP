@@ -17,7 +17,6 @@ const addProjectModal = document.getElementById('add-project-modal');
 const cancelAddProjectBtn = document.getElementById('cancel-add-project-btn');
 const confirmAddProjectBtn = document.getElementById('confirm-add-project-btn');
 const newProjectPath = document.getElementById('new-project-path');
-const newProjectName = document.getElementById('new-project-name');
 const currentTabTitle = document.getElementById('current-tab-title');
 const navItems = document.querySelectorAll('.nav-item');
 const tabPanels = document.querySelectorAll('.tab-panel');
@@ -32,6 +31,7 @@ const settingsGitRepo = document.getElementById('settings-git-repo');
 const settingsGitBranch = document.getElementById('settings-git-branch');
 const settingsSiteUrl = document.getElementById('settings-site-url');
 const settingsVpsRoot = document.getElementById('settings-vps-root');
+const settingsRetentionCount = document.getElementById('settings-retention-count');
 const settingsSaveBtn = document.getElementById('settings-save-btn');
 
 // Git Deployment Tab DOM Elements
@@ -357,7 +357,14 @@ navItems.forEach(item => {
     // Update breadcrumbs current section text
     currentTabTitle.textContent = item.textContent.trim();
 
-    // Fetch tab-specific data
+    // Manage polling and fetch tab-specific data
+    if (targetTab === 'overview') {
+      startStatsPolling();
+      checkLocalPorts();
+    } else {
+      stopStatsPolling();
+    }
+
     if (targetTab === 'settings') {
       loadSettings();
     } else if (targetTab === 'git') {
@@ -391,6 +398,12 @@ async function loadProjects() {
       await loadProjectFiles(currentProject);
       await loadSettings();
       await loadGitStatus();
+      
+      checkLocalPorts();
+      const activeTabItem = document.querySelector('.nav-item.active');
+      if (activeTabItem && activeTabItem.getAttribute('data-tab') === 'overview') {
+        startStatsPolling();
+      }
     } else {
       currentProject = '';
       overviewDir.textContent = 'None';
@@ -546,6 +559,7 @@ async function loadSettings() {
     if (settingsGitBranch) settingsGitBranch.value = settings.gitBranch || '';
     if (settingsSiteUrl) settingsSiteUrl.value = settings.siteUrl || '';
     if (settingsVpsRoot) settingsVpsRoot.value = settings.vpsInstallRoot || '';
+    if (settingsRetentionCount) settingsRetentionCount.value = settings.retentionCount || 0;
   } catch (err) {
     showToast('Failed to load settings & credentials.', 'error');
   }
@@ -1038,7 +1052,8 @@ if (settingsForm) {
       gitRepo: settingsGitRepo.value.trim(),
       gitBranch: settingsGitBranch.value.trim(),
       siteUrl: settingsSiteUrl.value.trim(),
-      vpsInstallRoot: settingsVpsRoot.value.trim()
+      vpsInstallRoot: settingsVpsRoot.value.trim(),
+      retentionCount: parseInt(settingsRetentionCount ? settingsRetentionCount.value : '0', 10) || 0
     };
     
     settingsSaveBtn.disabled = true;
@@ -1208,6 +1223,12 @@ function triggerRestoreConfirm(snapshot) {
   confirmRestoreBtn.disabled = true;
   modalRestoreSkipBackup.checked = false;
 
+  // Toggle port conflict warning inside restore modal
+  const modalRestorePortWarning = document.getElementById('modal-restore-port-warning');
+  if (modalRestorePortWarning) {
+    modalRestorePortWarning.style.display = hasPortConflict ? 'block' : 'none';
+  }
+
   restoreModal.classList.add('active');
   restoreConfirmInput.focus();
 }
@@ -1296,6 +1317,13 @@ projectSelect.addEventListener('change', async (e) => {
   currentProject = e.target.value;
   await loadProjectSnapshots(currentProject);
   await loadProjectFiles(currentProject);
+  await loadSettings();
+  await loadGitStatus();
+  checkLocalPorts();
+  const activeTabItem = document.querySelector('.nav-item.active');
+  if (activeTabItem && activeTabItem.getAttribute('data-tab') === 'overview') {
+    startStatsPolling();
+  }
 });
 
 // Snapshots manual sync list click
@@ -1527,7 +1555,6 @@ if (runParityBtn) {
 if (addProjectBtn) {
   addProjectBtn.addEventListener('click', () => {
     if (newProjectPath) newProjectPath.value = '';
-    if (newProjectName) newProjectName.value = '';
     if (addProjectModal) addProjectModal.classList.add('active');
   });
 }
@@ -1541,7 +1568,6 @@ if (cancelAddProjectBtn) {
 if (confirmAddProjectBtn) {
   confirmAddProjectBtn.addEventListener('click', async () => {
     const pathVal = newProjectPath ? newProjectPath.value.trim() : '';
-    const nameVal = newProjectName ? newProjectName.value.trim() : '';
     if (!pathVal) {
       showToast('Project folder path is required.', 'warning');
       return;
@@ -1554,22 +1580,18 @@ if (confirmAddProjectBtn) {
       const response = await fetch('/api/projects/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: pathVal, name: nameVal })
+        body: JSON.stringify({ path: pathVal })
       });
       
       if (response.ok) {
         showToast('Project mapping added successfully!', 'success');
         if (addProjectModal) addProjectModal.classList.remove('active');
         
-        // Auto-select newly added project
-        if (nameVal) {
-          currentProject = nameVal;
-        } else {
-          const pathParts = pathVal.replace(/\\/g, '/').split('/');
-          const nameCandidate = pathParts.pop() || pathParts.pop();
-          if (nameCandidate) {
-            currentProject = nameCandidate;
-          }
+        // Auto-select newly added project based on its folder name
+        const pathParts = pathVal.replace(/\\/g, '/').split('/');
+        const nameCandidate = pathParts.pop() || pathParts.pop();
+        if (nameCandidate) {
+          currentProject = nameCandidate;
         }
         
         await loadProjects();
@@ -1595,15 +1617,6 @@ if (newProjectPath) {
   });
 }
 
-if (newProjectName) {
-  newProjectName.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (confirmAddProjectBtn) confirmAddProjectBtn.click();
-    }
-  });
-}
-
 if (deleteProjectBtn) {
   deleteProjectBtn.addEventListener('click', async () => {
     if (!currentProject) {
@@ -1611,12 +1624,12 @@ if (deleteProjectBtn) {
       return;
     }
     
-    let confirmMsg = `Are you sure you want to remove project "${currentProject}" from the console?\nThis will not delete the project files or snapshots on disk, just the mapping in this dashboard.`;
     if (currentProject.toLowerCase() === 'mypools') {
-      confirmMsg = `WARNING: You are removing the default "mypools" project mapping.\n\n${confirmMsg}`;
+      showToast('The default project "mypools" cannot be deleted.', 'warning');
+      return;
     }
     
-    const confirmRemove = confirm(confirmMsg);
+    const confirmRemove = confirm(`Are you sure you want to remove project "${currentProject}" from the console?\nThis will not delete the project files or snapshots on disk, just the mapping in this dashboard.`);
     if (!confirmRemove) return;
     
     deleteProjectBtn.disabled = true;
@@ -1644,7 +1657,10 @@ if (deleteProjectBtn) {
 
 const gitSnapshotSelect = document.getElementById('git-snapshot-select');
 if (gitSnapshotSelect) {
-  gitSnapshotSelect.addEventListener('change', validateGitForm);
+  gitSnapshotSelect.addEventListener('change', (e) => {
+    validateGitForm();
+    loadGitDiffPreview(e.target.value);
+  });
 }
 
 // Folder browser implementation
@@ -1669,9 +1685,23 @@ async function browseFolder(targetInputEl) {
 // --- Application Entry Point Initialize ---
 document.addEventListener('DOMContentLoaded', () => {
   loadProjects();
-  loadSettings();
   initLogsStream();
-  validateGitForm();
+  
+  // Bind git diff card toggle
+  const gitDiffHeader = document.getElementById('git-diff-header');
+  const gitDiffToggleBtn = document.getElementById('git-diff-toggle-btn');
+  const gitDiffDetailedContent = document.getElementById('git-diff-detailed-content');
+  if (gitDiffHeader) {
+    gitDiffHeader.addEventListener('click', () => {
+      if (gitDiffDetailedContent) {
+        const isHidden = gitDiffDetailedContent.style.display === 'none';
+        gitDiffDetailedContent.style.display = isHidden ? 'block' : 'none';
+        if (gitDiffToggleBtn) {
+          gitDiffToggleBtn.textContent = isHidden ? 'Hide Details' : 'Show Details';
+        }
+      }
+    });
+  }
 
   // Bind Browse buttons
   const browseProjectPathBtn = document.getElementById('browse-project-path-btn');
@@ -1684,3 +1714,265 @@ document.addEventListener('DOMContentLoaded', () => {
     browseSettingsGitRepoBtn.addEventListener('click', () => browseFolder(settingsGitRepo));
   }
 });
+
+let hasPortConflict = false;
+let statsPollInterval = null;
+
+function startStatsPolling() {
+  stopStatsPolling();
+  pollContainerStats(); // run immediately
+  statsPollInterval = setInterval(pollContainerStats, 6000);
+}
+
+function stopStatsPolling() {
+  if (statsPollInterval) {
+    clearInterval(statsPollInterval);
+    statsPollInterval = null;
+  }
+}
+
+async function checkLocalPorts() {
+  const portsLoading = document.getElementById('ports-loading');
+  const portsList = document.getElementById('ports-list');
+  const portsOkAlert = document.getElementById('ports-ok-alert');
+  const portsConflictAlert = document.getElementById('ports-conflict-alert');
+  const modalRestorePortWarning = document.getElementById('modal-restore-port-warning');
+
+  if (!currentProject) return;
+
+  if (portsLoading) portsLoading.style.display = 'block';
+  if (portsList) portsList.style.display = 'none';
+  if (portsOkAlert) portsOkAlert.style.display = 'none';
+  if (portsConflictAlert) portsConflictAlert.style.display = 'none';
+
+  try {
+    const response = await fetch(`/api/project/check-ports?project=${currentProject}`);
+    if (!response.ok) throw new Error('API Error');
+    const data = await response.json();
+
+    if (portsLoading) portsLoading.style.display = 'none';
+    if (portsList) {
+      portsList.innerHTML = '';
+      portsList.style.display = 'flex';
+    }
+
+    if (!data.ports || data.ports.length === 0) {
+      if (portsOkAlert) portsOkAlert.style.display = 'block';
+      hasPortConflict = false;
+      if (modalRestorePortWarning) modalRestorePortWarning.style.display = 'none';
+      return;
+    }
+
+    let conflictFound = false;
+    data.ports.forEach(p => {
+      const portItem = document.createElement('div');
+      portItem.className = `port-item ${p.free ? 'port-free' : 'port-occupied'}`;
+      portItem.style.display = 'flex';
+      portItem.style.justifyContent = 'space-between';
+      portItem.style.alignItems = 'center';
+      portItem.style.padding = '8px 12px';
+      portItem.style.borderRadius = 'var(--radius-sm)';
+      portItem.style.border = '1px solid var(--border-subtle)';
+      portItem.style.fontSize = '13px';
+
+      const statusBadge = p.free 
+        ? '<span class="badge badge-success" style="font-size: 11px;">Free</span>' 
+        : '<span class="badge badge-danger" style="font-size: 11px;">Occupied</span>';
+
+      if (!p.free) {
+        conflictFound = true;
+      }
+
+      portItem.innerHTML = `
+        <span style="font-family: var(--font-family-mono); color: #fff;">Port ${p.port} <span style="color: var(--text-desc); font-size: 12px;">(${p.service} &rarr; ${p.containerPort})</span></span>
+        ${statusBadge}
+      `;
+      portsList.appendChild(portItem);
+    });
+
+    hasPortConflict = conflictFound;
+
+    if (conflictFound) {
+      if (portsConflictAlert) portsConflictAlert.style.display = 'block';
+      if (portsOkAlert) portsOkAlert.style.display = 'none';
+    } else {
+      if (portsOkAlert) portsOkAlert.style.display = 'block';
+      if (portsConflictAlert) portsConflictAlert.style.display = 'none';
+    }
+  } catch (err) {
+    console.error('Port checking failed:', err);
+    if (portsLoading) portsLoading.style.display = 'none';
+    showToast('Failed to verify local ports.', 'error');
+  }
+}
+
+async function pollContainerStats() {
+  const resourcesLoading = document.getElementById('resources-loading');
+  const resourcesList = document.getElementById('resources-list');
+  const resourcesEmpty = document.getElementById('resources-empty');
+
+  if (!currentProject) return;
+
+  try {
+    const response = await fetch(`/api/containers/stats?project=${currentProject}`);
+    if (!response.ok) throw new Error('API Error');
+    const data = await response.json();
+
+    if (resourcesLoading) resourcesLoading.style.display = 'none';
+
+    if (!data.stats || data.stats.length === 0) {
+      if (resourcesList) resourcesList.style.display = 'none';
+      if (resourcesEmpty) resourcesEmpty.style.display = 'block';
+      return;
+    }
+
+    if (resourcesEmpty) resourcesEmpty.style.display = 'none';
+    if (resourcesList) {
+      resourcesList.innerHTML = '';
+      resourcesList.style.display = 'flex';
+    }
+
+    data.stats.forEach(s => {
+      const cpuVal = parseFloat(s.cpu) || 0;
+      const memVal = parseFloat(s.memPerc) || 0;
+
+      const containerEl = document.createElement('div');
+      containerEl.className = 'container-stat-row';
+      containerEl.style.display = 'flex';
+      containerEl.style.flexDirection = 'column';
+      containerEl.style.gap = '6px';
+      containerEl.style.padding = '10px 12px';
+      containerEl.style.borderRadius = 'var(--radius-md)';
+      containerEl.style.backgroundColor = 'rgba(255, 255, 255, 0.02)';
+      containerEl.style.border = '1px solid var(--border-subtle)';
+
+      const cleanName = s.name.replace(/^[a-zA-Z0-9_\-]+_(mysql|redis|php|nginx|web|db)_[0-9]+$/, '$1')
+                             .replace(/^[a-zA-Z0-9_\-]+_(mysql|redis|php|nginx|web|db)$/, '$1');
+
+      containerEl.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 600; color: #fff; font-size: 13px;">${cleanName}</span>
+          <span style="font-size: 11px; color: var(--text-desc); font-family: var(--font-family-mono);">${s.netIo}</span>
+        </div>
+        
+        <!-- CPU Stat -->
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-desc);">
+            <span>CPU Usage</span>
+            <span style="font-family: var(--font-family-mono); color: #fff;">${s.cpu}</span>
+          </div>
+          <div class="progress-bar-container" style="height: 6px; background-color: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; margin-top: 2px;">
+            <div class="progress-bar-fill stats-cpu-fill" style="width: ${Math.min(100, cpuVal)}%; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #14b8a6, #0d9488); transition: width 0.4s ease;"></div>
+          </div>
+        </div>
+
+        <!-- Memory Stat -->
+        <div style="display: flex; flex-direction: column; gap: 2px; margin-top: 4px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-desc);">
+            <span>Memory (${s.memUsage})</span>
+            <span style="font-family: var(--font-family-mono); color: #fff;">${s.memPerc}</span>
+          </div>
+          <div class="progress-bar-container" style="height: 6px; background-color: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; margin-top: 2px;">
+            <div class="progress-bar-fill stats-mem-fill" style="width: ${Math.min(100, memVal)}%; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #6366f1, #4f46e5); transition: width 0.4s ease;"></div>
+          </div>
+        </div>
+      `;
+      resourcesList.appendChild(containerEl);
+    });
+
+  } catch (err) {
+    console.error('Resource stats polling failed:', err);
+    if (resourcesLoading) resourcesLoading.style.display = 'none';
+  }
+}
+
+async function loadGitDiffPreview(snapshotName) {
+  const gitDiffCard = document.getElementById('git-diff-card');
+  const gitDiffStatusBadge = document.getElementById('git-diff-status-badge');
+  const gitDiffSummaryContent = document.getElementById('git-diff-summary-content');
+  const gitDiffPre = document.getElementById('git-diff-pre');
+
+  if (!snapshotName) {
+    if (gitDiffCard) gitDiffCard.style.display = 'none';
+    return;
+  }
+
+  if (gitDiffCard) gitDiffCard.style.display = 'block';
+  if (gitDiffStatusBadge) {
+    gitDiffStatusBadge.className = 'badge badge-muted';
+    gitDiffStatusBadge.textContent = 'Loading Diff...';
+  }
+  if (gitDiffSummaryContent) {
+    gitDiffSummaryContent.innerHTML = `
+      <div class="loading-state" style="padding: 10px 0; width: 100%; display: flex; align-items: center; gap: 8px;">
+        <div class="spinner" style="width: 16px; height: 16px;"></div>
+        Querying git diff preview...
+      </div>
+    `;
+  }
+  if (gitDiffPre) gitDiffPre.textContent = 'Loading diff details...';
+
+  try {
+    const response = await fetch(`/api/git/diff-preview?project=${currentProject}&snapshotName=${snapshotName}`);
+    if (!response.ok) throw new Error('API Error');
+    const data = await response.json();
+
+    if (data.isFallback) {
+      if (gitDiffStatusBadge) {
+        gitDiffStatusBadge.className = 'badge badge-warning';
+        gitDiffStatusBadge.textContent = 'Fallback Diff';
+      }
+      if (gitDiffSummaryContent) {
+        gitDiffSummaryContent.innerHTML = `
+          <div class="alert-box alert-warning" style="margin: 0; width: 100%;">
+            <strong>Warning:</strong> ${data.warning || 'Could not reach VPS for production commit. Comparing snapshot commit against local HEAD.'}
+          </div>
+        `;
+      }
+    } else {
+      if (gitDiffStatusBadge) {
+        gitDiffStatusBadge.className = 'badge badge-teal';
+        gitDiffStatusBadge.textContent = 'VPS vs Snapshot';
+      }
+      
+      let summaryText = 'No changes between VPS and Snapshot.';
+      if (data.diff && data.diff !== 'No changes') {
+        const lines = data.diff.split('\n');
+        const lastLine = lines[lines.length - 1];
+        if (lastLine && (lastLine.includes('changed') || lastLine.includes('insertion') || lastLine.includes('deletion'))) {
+          summaryText = lastLine.trim();
+        } else {
+          summaryText = 'Differences detected. Expand details to see file changes.';
+        }
+      }
+
+      if (gitDiffSummaryContent) {
+        gitDiffSummaryContent.innerHTML = `
+          <div class="alert-box alert-success" style="margin: 0; width: 100%; display: flex; align-items: center; justify-content: space-between;">
+            <span><strong>Diff Summary:</strong> ${summaryText}</span>
+            <span style="font-family: var(--font-family-mono); font-size: 11px; opacity: 0.8;">VPS: ${data.vpsCommit ? data.vpsCommit.substring(0, 8) : 'N/A'} &rarr; Snap: ${data.snapshotCommit ? data.snapshotCommit.substring(0, 8) : 'N/A'}</span>
+          </div>
+        `;
+      }
+    }
+
+    if (gitDiffPre) {
+      gitDiffPre.textContent = data.diff || 'No changes';
+    }
+
+  } catch (err) {
+    console.error('Git diff preview failed:', err);
+    if (gitDiffStatusBadge) {
+      gitDiffStatusBadge.className = 'badge badge-danger';
+      gitDiffStatusBadge.textContent = 'Error';
+    }
+    if (gitDiffSummaryContent) {
+      gitDiffSummaryContent.innerHTML = `
+        <div class="alert-box alert-danger" style="margin: 0; width: 100%;">
+          Failed to load git diff preview.
+        </div>
+      `;
+    }
+    if (gitDiffPre) gitDiffPre.textContent = 'Error fetching git diff details.';
+  }
+}

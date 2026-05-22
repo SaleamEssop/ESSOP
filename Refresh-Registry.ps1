@@ -5,7 +5,7 @@
   Called automatically by Create-Snapshot.ps1 and Restore-Snapshot.ps1.
 #>
 
-$SnapshotsRoot = $PSScriptRoot
+$SnapshotsRoot = "C:\snapshots"
 $ProjectsFile = Join-Path $SnapshotsRoot "projects.json"
 
 $projectsList = @()
@@ -39,12 +39,8 @@ foreach ($proj in $projectsList) {
     $projName = $proj.name
     $projPath = $proj.path
 
-    # Try local snapshots folder first
-    $snapsPath = Join-Path $projPath "snapshots"
-    if (-not (Test-Path $snapsPath)) {
-        # Try .snapshots for backward compatibility
-        $snapsPath = Join-Path $projPath ".snapshots"
-    }
+    # Try local .snapshots folder first
+    $snapsPath = Join-Path $projPath ".snapshots"
     if (-not (Test-Path $snapsPath)) {
         # Fallback to C:\snapshots\<ProjectName>
         $snapsPath = Join-Path $SnapshotsRoot $projName

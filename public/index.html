@@ -18,7 +18,13 @@
     <!-- Sidebar Navigation -->
     <aside class="app-sidebar">
       <div class="sidebar-header">
-        <img src="logo.png" alt="ESSOP" class="sidebar-logo-img">
+        <svg class="do-logo" viewBox="0 0 24 24" width="28" height="28">
+          <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Zm-3,6a3,3,0,1,1,3,3A3,3,0,0,1,9,12Z"/>
+        </svg>
+        <div class="sidebar-logo-text">
+          <h2>Recovery</h2>
+          <span>SNAPSHOT PANEL</span>
+        </div>
       </div>
       
       <nav class="sidebar-nav">
@@ -221,6 +227,50 @@
                   Take Snapshot
                 </button>
               </form>
+            </div>
+          </div>
+
+          <!-- Local Port conflict and Resource monitoring row -->
+          <div class="overview-layout-split" style="margin-top: 24px; grid-template-columns: 1fr 1fr;">
+            <!-- Local Port Conflict detector -->
+            <div class="card detail-card" id="overview-port-card">
+              <h3 class="card-title">Local Port Monitor</h3>
+              <p class="card-subtitle">Verification of compose ports mapping availability</p>
+              
+              <div class="port-status-container" style="margin-top: 16px; flex: 1; display: flex; flex-direction: column; gap: 10px;">
+                <div class="loading-state" id="ports-loading" style="padding: 20px;">
+                  <div class="spinner" style="width: 20px; height: 20px; margin-bottom: 8px;"></div>
+                  Checking local port availability...
+                </div>
+                <div id="ports-list" style="display: none; flex-direction: column; gap: 8px;">
+                  <!-- Dynamically populated ports status -->
+                </div>
+                <div id="ports-ok-alert" class="alert-box alert-success" style="display: none; margin: 0; font-size: 13px;">
+                  <strong>Port Status:</strong> All compose ports are free and available.
+                </div>
+                <div id="ports-conflict-alert" class="alert-box alert-danger" style="display: none; margin: 0; font-size: 13px;">
+                  <strong>PORT CONFLICT WARNING:</strong> One or more compose host ports are already bound by other local processes.
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Container Stats (Resource Monitor) -->
+            <div class="card detail-card" id="overview-resources-card">
+              <h3 class="card-title">Resource Monitor</h3>
+              <p class="card-subtitle">Real-time local container metrics (CPU / Memory / Network)</p>
+              
+              <div class="resources-container" style="margin-top: 16px; flex: 1; display: flex; flex-direction: column; gap: 12px;">
+                <div class="loading-state" id="resources-loading" style="padding: 20px;">
+                  <div class="spinner" style="width: 20px; height: 20px; margin-bottom: 8px;"></div>
+                  Polling container stats...
+                </div>
+                <div id="resources-list" style="display: none; flex-direction: column; gap: 10px;">
+                  <!-- Dynamically populated metrics -->
+                </div>
+                <div id="resources-empty" class="alert-box alert-info" style="display: none; margin: 0; font-size: 13px;">
+                  <strong>Metrics Status:</strong> No active containers running for this project.
+                </div>
+              </div>
             </div>
           </div>
 
@@ -443,6 +493,24 @@
                 </div>
               </div>
 
+              <!-- Snapshot Retention Section -->
+              <div style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 20px;">
+                <h4 style="font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                  <svg viewBox="0 0 24 24" width="18" height="18" class="text-teal"><path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Z"/></svg>
+                  Snapshot Retention & Cleanup Policy
+                </h4>
+                
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr; gap: 16px;">
+                  <div class="form-group">
+                    <label for="settings-retention-count">Max Retention Count (0 for unlimited)</label>
+                    <input type="number" id="settings-retention-count" placeholder="e.g. 5" min="0" required style="background-color: var(--bg-input); color: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 10px 12px; font-family: var(--font-family-sans); font-size: 13px; outline: none; transition: all 0.2s;">
+                    <span style="font-size: 12px; color: var(--text-desc); margin-top: 4px; display: block;">
+                      Automatically prunes the oldest snapshots when this limit is exceeded during a new snapshot run.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <div style="margin-top: 12px; display: flex; justify-content: flex-end;">
                 <button type="submit" id="settings-save-btn" class="btn btn-primary font-bold" style="padding: 10px 24px;">
                   Save Settings
@@ -583,6 +651,36 @@
               </div>
             </div>
 
+          </div>
+
+          <!-- Pre-Deployment Git Diff Preview Panel -->
+          <div class="card" id="git-diff-card" style="margin-top: 24px; display: none;">
+            <div class="card-header" id="git-diff-header" style="cursor: pointer; user-select: none; margin-bottom: 0;">
+              <div>
+                <h3 class="card-title" style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                  Pre-Deployment Git Diff Preview
+                  <span id="git-diff-status-badge" class="badge badge-muted">No Snapshot Selected</span>
+                </h3>
+                <p class="card-subtitle">Compares the selected recovery snapshot commit against the target VPS production branch</p>
+              </div>
+              <button type="button" class="btn btn-secondary flex-center" id="git-diff-toggle-btn" style="padding: 6px 12px; height: 32px;">
+                Show Details
+              </button>
+            </div>
+            
+            <!-- Collapsed state content: summary metrics -->
+            <div id="git-diff-summary-content" style="margin-top: 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+              <div class="alert-box alert-info" style="margin: 0; width: 100%;">
+                Select a snapshot in the deploy form to load the git diff comparison with the live VPS deployment.
+              </div>
+            </div>
+
+            <!-- Expanded state content: code block with --stat preview -->
+            <div id="git-diff-detailed-content" style="display: none; margin-top: 16px;">
+              <div class="terminal-body-full" style="padding: 12px; max-height: 300px; background-color: #050a11;">
+                <pre id="git-diff-pre" class="font-mono text-xs" style="color: #cbd5e1; white-space: pre-wrap; margin: 0;">Loading diff details...</pre>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -844,6 +942,11 @@
           <strong>CRITICAL WARNING:</strong> Restoring will completely overwrite the files in the project path. A live safety pre-restore backup will be created unless checked below.
         </div>
 
+        <!-- Dynamic Port conflict warnings for restore modal -->
+        <div id="modal-restore-port-warning" class="alert-box alert-danger" style="display: none; margin-bottom: 12px;">
+          <strong>PORT CONFLICT DETECTED:</strong> Restoring state now may fail to bind composition ports. Some ports mapped in this compose are in use locally!
+        </div>
+
         <div class="form-checkboxes" style="margin: 12px 0;">
           <label class="switch-container">
             <input type="checkbox" id="modal-restore-skip-backup">
@@ -913,13 +1016,9 @@
       <div class="modal-content" style="padding-top: 20px;">
         <p>Register a self-contained local project folder (e.g. <code>C:\ESSOP</code> or <code>C:\Podman\MyPools</code>) in the console.</p>
         <div class="alert-box alert-info" style="margin: 14px 0; font-size: 13px;">
-          <strong>NOTE:</strong> If the folder path does not exist, the console will attempt to create it for you. The console will isolate settings inside its <code>.local/</code> directory and store snapshots inside <code>snapshots/</code>.
+          <strong>NOTE:</strong> The folder must already exist on your filesystem. The console will isolate settings inside its <code>.local/</code> directory and store snapshots inside <code>.snapshots/</code>.
         </div>
         <form id="add-project-form" class="action-form" onsubmit="event.preventDefault();">
-          <div class="form-group">
-            <label for="new-project-name">Project Name (Optional)</label>
-            <input type="text" id="new-project-name" placeholder="e.g. mypools-alt (auto-derived if blank)" autocomplete="off" style="width: 100%; box-sizing: border-box; margin-bottom: 12px;">
-          </div>
           <div class="form-group">
             <label for="new-project-path">Absolute Folder Path</label>
             <div style="display: flex; gap: 8px; align-items: center;">

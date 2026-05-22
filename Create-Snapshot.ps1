@@ -29,11 +29,12 @@ param(
     [string]$SourcePath,
     [switch]$Live,
     [switch]$NoDatabase,
-    [string]$ExcludePaths = ""
+    [string]$ExcludePaths = "",
+    [int]$RetentionCount = 0
 )
 
 $ErrorActionPreference = "Stop"
-$script:SnapshotsRoot = $PSScriptRoot
+$script:SnapshotsRoot = "C:\snapshots"
 
 # ── Resolve project source path ────────────────────────────
 function Get-ProjectSourcePath {
@@ -55,9 +56,9 @@ function Get-ProjectSourcePath {
     }
 
     $known = @{
-        "mypools"        = "C:\mypools"
-        "mycities"       = "C:\mycities"
-        "deepseek-tunnel" = "C:\deepseek-tunnel"
+        "mypools"        = "C:\Podman\MyPools"
+        "mycities"       = "C:\Docker\projects\mycities"
+        "deepseek-tunnel" = "C:\Podman\ngrok"
     }
 
     if ($known.ContainsKey($Proj)) {
@@ -116,14 +117,14 @@ if (-not (Test-Path $composeFile)) { throw "compose.yml not found at $composeFil
 $envFilePath = if (Test-Path (Join-Path $Source ".env.local")) { Join-Path $Source ".env.local" } else { Join-Path $Source ".env" }
 
 $timestamp = Get-Date -Format "yyyy-MM-dd-HHmm"
-$snapsPath = Join-Path $Source "snapshots"
+$snapsPath = Join-Path $Source ".snapshots"
 $snapshotDir = Join-Path $snapsPath $timestamp
 New-Item -ItemType Directory -Path $snapshotDir -Force | Out-Null
 Write-Host "Snapshot: $snapshotDir" -ForegroundColor White
 
 # Update gitignore
 $gitignorePath = Join-Path $Source ".gitignore"
-$ignoreEntries = @("snapshots/", ".snapshots/", ".local/")
+$ignoreEntries = @(".snapshots/", ".local/")
 if (Test-Path $gitignorePath) {
     $content = Get-Content $gitignorePath
     $toAppend = @()
@@ -265,7 +266,6 @@ $excludeDirs = @(
     "wp-content\cache",
     "wp-content\upgrade",
     ".local",
-    "snapshots",
     ".snapshots",
     "secrets",
     "backups",
@@ -421,8 +421,24 @@ if ($wasStopped) {
 }
 
 # ── Step 6: Update active.txt ───────────────────────────────
-$activeFile = Join-Path $Source "snapshots\active.txt"
+$activeFile = Join-Path $Source ".snapshots\active.txt"
 $timestamp | Out-File -FilePath $activeFile -Encoding UTF8 -NoNewline
+
+# ── Step 6.5: Prune old snapshots based on Retention Policy ──
+if ($RetentionCount -gt 0) {
+    Write-Host "`nPruning old snapshots (Retention Limit: $RetentionCount)..." -ForegroundColor Cyan
+    $existingSnaps = @(Get-ChildItem -Path $snapsPath -Directory -ErrorAction SilentlyContinue | Where-Object {
+        Test-Path (Join-Path $_.FullName "snapshot.json")
+    } | Sort-Object Name -Descending)
+
+    if ($existingSnaps.Count -gt $RetentionCount) {
+        $toDelete = $existingSnaps | Select-Object -Skip $RetentionCount
+        foreach ($snap in $toDelete) {
+            Write-Host "Pruning old snapshot directory: $($snap.Name)" -ForegroundColor Yellow
+            Remove-Item -Path $snap.FullName -Recurse -Force | Out-Null
+        }
+    }
+}
 
 # ── Step 7: Refresh registry ─────────────────────────────────
 $refreshScript = Join-Path $SnapshotsRoot "Refresh-Registry.ps1"

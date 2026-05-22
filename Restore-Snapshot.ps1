@@ -23,7 +23,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SnapshotsRoot = $PSScriptRoot
+$SnapshotsRoot = "C:\snapshots"
 
 # ── Resolve project source path ────────────────────────────
 function Get-ProjectSourcePath {
@@ -45,9 +45,9 @@ function Get-ProjectSourcePath {
     }
 
     $known = @{
-        "mypools"        = "C:\mypools"
-        "mycities"       = "C:\mycities"
-        "deepseek-tunnel" = "C:\deepseek-tunnel"
+        "mypools"        = "C:\Podman\MyPools"
+        "mycities"       = "C:\Docker\projects\mycities"
+        "deepseek-tunnel" = "C:\Podman\ngrok"
     }
 
     if ($known.ContainsKey($Proj)) {
@@ -60,12 +60,8 @@ function Get-ProjectSourcePath {
 
 $Source = Get-ProjectSourcePath -Proj $Project
 
-# Try local snapshots folder first
-$projectSnapshotDir = Join-Path $Source "snapshots"
-if (-not (Test-Path $projectSnapshotDir)) {
-    # Try .snapshots for backward compatibility
-    $projectSnapshotDir = Join-Path $Source ".snapshots"
-}
+# Try local .snapshots folder first
+$projectSnapshotDir = Join-Path $Source ".snapshots"
 if (-not (Test-Path $projectSnapshotDir)) {
     # Fallback to C:\snapshots\<Project>
     $projectSnapshotDir = Join-Path $SnapshotsRoot $Project

@@ -18,7 +18,6 @@ param(
     [switch]$OverwriteDatabase
 )
 
-$script:SnapshotsRoot = $PSScriptRoot
 $ErrorActionPreference = "Continue"
 $localRepo = (Resolve-Path $SourcePath).Path
 $ProjectName = Split-Path -Leaf $localRepo
@@ -28,11 +27,11 @@ function Get-ToolPath {
     param([string]$ToolName)
     $projTools = Join-Path $localRepo "tools\$ToolName"
     if (Test-Path $projTools) { return $projTools }
-    $globalTools = Join-Path $script:SnapshotsRoot "tools\$ToolName"
+    $globalTools = "C:\snapshots\tools\$ToolName"
     if (Test-Path $globalTools) { return $globalTools }
     $cmd = Get-Command $ToolName -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
-    $scriptDirTool = Join-Path $script:SnapshotsRoot "tools\$ToolName"
+    $scriptDirTool = Join-Path "C:\snapshots" "tools\$ToolName"
     if (Test-Path $scriptDirTool) { return $scriptDirTool }
     return $ToolName # Fallback to path execution
 }
@@ -107,21 +106,18 @@ Write-Host "Source Snapshot   : $SnapshotName"                            -Foreg
 # PRE-DEPLOYMENT: Local Restore of Selected Snapshot
 # ----------------------------------------------------
 if ($SnapshotName) {
-    $snapsPath = Join-Path $localRepo "snapshots"
-    if (-not (Test-Path $snapsPath)) {
-        $snapsPath = Join-Path $localRepo ".snapshots"
-    }
+    $snapsPath = Join-Path $localRepo ".snapshots"
     $snapshotDir = Join-Path $snapsPath $SnapshotName
     if (-not (Test-Path $snapshotDir)) {
-        # Fallback to external snapshots directory
-        $snapshotDir = Join-Path $script:SnapshotsRoot "$ProjectName\$SnapshotName"
+        # Fallback to C:\snapshots\<ProjectName>
+        $snapshotDir = Join-Path "C:\snapshots\$ProjectName" $SnapshotName
     }
     if (-not (Test-Path $snapshotDir)) {
         throw "Snapshot directory not found at $snapshotDir"
     }
     
     Write-Host "`n>>> [PRE-DEPLOYMENT] Restoring snapshot '$SnapshotName' locally prior to deployment..." -ForegroundColor Yellow
-    $restoreScript = Join-Path $script:SnapshotsRoot "Restore-Snapshot.ps1"
+    $restoreScript = "C:\snapshots\Restore-Snapshot.ps1"
     if (-not (Test-Path $restoreScript)) {
         throw "Local restore script not found at $restoreScript"
     }

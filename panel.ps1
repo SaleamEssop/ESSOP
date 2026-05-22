@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-$SnapshotsRoot = $PSScriptRoot
+$SnapshotsRoot = "C:\snapshots"
 $script:ActiveProject = "mypools"
 $script:Snapshots = @()
 $script:IsBusy = $false
@@ -16,7 +16,7 @@ $BorderColor= [System.Drawing.Color]::FromArgb(30, 58, 80)
 $InputBg    = [System.Drawing.Color]::FromArgb(26, 42, 58)
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "ESSOP - Snapshot Recovery"
+$form.Text = "MyPools - Snapshot Recovery"
 $form.Size = New-Object System.Drawing.Size(840, 620)
 $form.StartPosition = "CenterScreen"
 $form.BackColor = $BgColor
@@ -25,14 +25,14 @@ $form.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $form.MinimumSize = New-Object System.Drawing.Size(700, 500)
 
 $header = New-Object System.Windows.Forms.Label
-$header.Text = "ESSOP - Snapshot Recovery Console"
+$header.Text = "MyPools - Snapshot Recovery"
 $header.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
 $header.ForeColor = [System.Drawing.Color]::White
 $header.Size = New-Object System.Drawing.Size(800, 30)
 $header.Location = New-Object System.Drawing.Point(20, 15)
 
 $subtitle = New-Object System.Windows.Forms.Label
-$subtitle.Text = "Snapshots location: $SnapshotsRoot (external)"
+$subtitle.Text = "Snapshots at C:\snapshots\  (external - survives project loss)"
 $subtitle.ForeColor = $MutedColor
 $subtitle.Size = New-Object System.Drawing.Size(800, 20)
 $subtitle.Location = New-Object System.Drawing.Point(20, 45)
@@ -186,21 +186,10 @@ $statusBar.Size = New-Object System.Drawing.Size(780, 25)
 $statusBar.Location = New-Object System.Drawing.Point(20, ($btnY + 42))
 function LoadProjects {
   $projectCombo.Items.Clear()
-  $projectsFile = Join-Path $SnapshotsRoot "projects.json"
-  if (Test-Path $projectsFile) {
-    try {
-      $json = Get-Content $projectsFile -Raw | ConvertFrom-Json
-      foreach ($proj in $json) {
-        if ($proj.name) { [void]$projectCombo.Items.Add($proj.name) }
-      }
-    } catch {}
-  }
-  if ($projectCombo.Items.Count -eq 0) {
-    if (Test-Path $SnapshotsRoot) {
-      Get-ChildItem -Path $SnapshotsRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -notmatch "^(templates|_archive)$" -and (Test-Path (Join-Path $_.FullName "active.txt"))
-      } | ForEach-Object { [void]$projectCombo.Items.Add($_.Name) }
-    }
+  if (Test-Path $SnapshotsRoot) {
+    Get-ChildItem -Path $SnapshotsRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
+      $_.Name -notmatch "^(templates|_archive)$" -and (Test-Path (Join-Path $_.FullName "active.txt"))
+    } | ForEach-Object { [void]$projectCombo.Items.Add($_.Name) }
   }
   if ($projectCombo.Items.Count -eq 0) { [void]$projectCombo.Items.Add("mypools") }
   $projectCombo.SelectedIndex = 0
@@ -301,28 +290,9 @@ function DeleteSelected {
   )
   if ($result -ne "Yes") { return }
   $script:IsBusy = $true; $statusBar.Text = "Deleting $name..."; $form.Refresh()
-  
-  $projPath = ""
-  $projectsFile = Join-Path $SnapshotsRoot "projects.json"
-  if (Test-Path $projectsFile) {
-    try {
-      $projs = Get-Content $projectsFile -Raw | ConvertFrom-Json
-      $p = $projs | Where-Object { $_.name -eq $script:ActiveProject }
-      if ($p) { $projPath = $p.path }
-    } catch {}
-  }
-  
-  $targetDir = ""
-  if ($projPath -and (Test-Path (Join-Path $projPath "snapshots\$name"))) {
-    $targetDir = Join-Path $projPath "snapshots\$name"
-  } elseif ($projPath -and (Test-Path (Join-Path $projPath ".snapshots\$name"))) {
-    $targetDir = Join-Path $projPath ".snapshots\$name"
-  } else {
-    $targetDir = Join-Path $SnapshotsRoot "$script:ActiveProject\$name"
-  }
-
+  $targetDir = Join-Path $SnapshotsRoot "$script:ActiveProject\$name"
   try {
-    if ($targetDir -and (Test-Path $targetDir)) { Remove-Item -Recurse -Force $targetDir }
+    if (Test-Path $targetDir) { Remove-Item -Recurse -Force $targetDir }
     $refreshScript = Join-Path $SnapshotsRoot "Refresh-Registry.ps1"
     & $refreshScript 2>$null | Out-Null
     LoadSnapshots
