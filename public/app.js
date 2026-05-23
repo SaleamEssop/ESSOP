@@ -429,10 +429,10 @@ async function loadProjects() {
       }
     } else {
       currentProject = '';
-      overviewDir.textContent = 'None';
-      overviewComposeName.textContent = '-';
-      overviewCount.textContent = '0';
-      overviewLatest.textContent = 'Never';
+      if (overviewDir) overviewDir.textContent = 'None';
+      if (overviewComposeName) overviewComposeName.textContent = '-';
+      if (overviewCount) overviewCount.textContent = '0';
+      if (overviewLatest) overviewLatest.textContent = 'Never';
       renderEmptyState();
     }
   } catch (err) {
@@ -455,9 +455,9 @@ async function loadProjectSnapshots(project) {
     const data = await response.json();
     
     // Update active project info panels
-    overviewDir.textContent = data.source_path || 'C:\\Podman\\' + project;
-    overviewComposeName.textContent = project + '-local';
-    overviewCount.textContent = (data.snapshots || []).length;
+    if (overviewDir) overviewDir.textContent = data.source_path || 'C:\\Podman\\' + project;
+    if (overviewComposeName) overviewComposeName.textContent = project + '-local';
+    if (overviewCount) overviewCount.textContent = (data.snapshots || []).length;
 
     const activePathEl = document.getElementById('snapshot-active-path');
     if (activePathEl) {
@@ -466,10 +466,10 @@ async function loadProjectSnapshots(project) {
     
     snapshots = data.snapshots || [];
     if (snapshots.length > 0) {
-      overviewLatest.textContent = getRelativeTime(snapshots[0].timestamp);
+      if (overviewLatest) overviewLatest.textContent = getRelativeTime(snapshots[0].timestamp);
       renderSnapshotsTable();
     } else {
-      overviewLatest.textContent = 'Never';
+      if (overviewLatest) overviewLatest.textContent = 'Never';
       renderEmptyState();
     }
 
