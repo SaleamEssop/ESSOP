@@ -3183,3 +3183,16 @@ server.listen(PORT, () => {
     console.error('Failed to initialize watchers at startup:', e);
   }
 });
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n[ERROR] Port ${PORT} is already in use. Another instance of the server may be running.`);
+    console.error(`[ERROR] To find and kill the existing process, run:`);
+    console.error(`[ERROR]   netstat -ano | findstr :${PORT}`);
+    console.error(`[ERROR]   Stop-Process -Id <PID> -Force\n`);
+    process.exit(1);
+  } else {
+    console.error('[ERROR] Server encountered an unexpected error:', err);
+    process.exit(1);
+  }
+});
