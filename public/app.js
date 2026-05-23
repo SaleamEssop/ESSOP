@@ -486,6 +486,7 @@ async function loadProjectSnapshots(project) {
       validateGitForm();
     }
   } catch (err) {
+    console.error('[loadProjectSnapshots] Error:', err);
     showToast('Failed to fetch snapshots registry.', 'error');
     renderErrorState();
   }
