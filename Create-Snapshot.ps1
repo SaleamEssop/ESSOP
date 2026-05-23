@@ -35,7 +35,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$script:SnapshotsRoot = "C:\snapshots"
+$script:SnapshotsRoot = $PSScriptRoot
 
 # ── Resolve project source path ────────────────────────────
 function Get-ProjectSourcePath {
@@ -62,7 +62,6 @@ function Get-ProjectSourcePath {
     $known = @{
         "mypools"        = "C:\Podman\MyPools"
         "ESSOP"          = "C:\ESSOP"
-        "snapshots"      = "C:\snapshots"
         "mycities"       = "C:\Docker\projects\mycities"
         "deepseek-tunnel" = "C:\Podman\ngrok"
     }
@@ -579,13 +578,13 @@ $levelDescription
 $Description
 
 ## Recovery Instructions
-1. Run `C:\snapshots\panel.ps1` (PowerShell admin panel)
+1. Run `C:\ESSOP\panel.ps1` (PowerShell admin panel)
 2. Find this snapshot (`$timestamp`)
 3. Click **Restore Selected**
 
 Or from PowerShell:
 ```
-C:\snapshots\Restore-Snapshot.ps1 -Project $Project -SnapshotName $timestamp
+C:\ESSOP\Restore-Snapshot.ps1 -Project $Project -SnapshotName $timestamp
 ```
 
 ## Contents

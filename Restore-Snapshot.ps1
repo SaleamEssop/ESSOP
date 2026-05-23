@@ -49,7 +49,6 @@ function Get-ProjectSourcePath {
     $known = @{
         "mypools"        = "C:\Podman\MyPools"
         "ESSOP"          = "C:\ESSOP"
-        "snapshots"      = "C:\snapshots"
         "mycities"       = "C:\Docker\projects\mycities"
         "deepseek-tunnel" = "C:\Podman\ngrok"
     }

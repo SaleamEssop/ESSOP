@@ -5,7 +5,7 @@
   Called automatically by Create-Snapshot.ps1 and Restore-Snapshot.ps1.
 #>
 
-$SnapshotsRoot = "C:\snapshots"
+$SnapshotsRoot = $PSScriptRoot
 $projectsJsonPath = Join-Path $SnapshotsRoot "projects.json"
 $projectsList = @()
 
@@ -29,7 +29,6 @@ if (Test-Path $projectsJsonPath) {
 $fallbackProjects = @{
     "mypools"   = "C:\Podman\MyPools"
     "ESSOP"     = "C:\ESSOP"
-    "snapshots" = "C:\snapshots"
 }
 
 foreach ($key in $fallbackProjects.Keys) {

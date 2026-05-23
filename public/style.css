@@ -1813,6 +1813,80 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(0, 210, 196, 0); }
 }
 
+/* Step progress text */
+.step-progress {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-desc);
+  display: block;
+  margin-top: 4px;
+}
+
+/* Version Parity Card */
+.git-versions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .git-versions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.git-version-box {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: center;
+  transition: border-color 0.3s ease;
+}
+
+.git-version-label {
+  font-family: 'Outfit', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-desc);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.git-version-hash {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  display: block;
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.git-version-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+}
+
+/* Progress bar track for git file counts */
+.git-file-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.git-file-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--blue));
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
 /* ================= HEALTH & PARITY TAB VIEW STYLING ================= */
 .parity-layout {
   display: flex;

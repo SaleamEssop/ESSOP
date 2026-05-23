@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-$SnapshotsRoot = "C:\snapshots"
+$SnapshotsRoot = $PSScriptRoot
 $script:ActiveProject = "mypools"
 $script:Snapshots = @()
 $script:IsBusy = $false
@@ -32,7 +32,7 @@ $header.Size = New-Object System.Drawing.Size(800, 30)
 $header.Location = New-Object System.Drawing.Point(20, 15)
 
 $subtitle = New-Object System.Windows.Forms.Label
-$subtitle.Text = "Snapshots at C:\snapshots\  (external - survives project loss)"
+$subtitle.Text = "Snapshots at $SnapshotsRoot  (external - survives project loss)"
 $subtitle.ForeColor = $MutedColor
 $subtitle.Size = New-Object System.Drawing.Size(800, 20)
 $subtitle.Location = New-Object System.Drawing.Point(20, 45)

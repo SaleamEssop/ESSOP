@@ -12,10 +12,11 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$SourcePath,
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $false)]
     [string]$SnapshotName,
     [string]$CommitMessage = "Deploy from Snapshot Recovery Panel",
-    [switch]$OverwriteDatabase
+    [switch]$OverwriteDatabase,
+    [switch]$GitOnly
 )
 
 $ErrorActionPreference = "Continue"
@@ -27,12 +28,10 @@ function Get-ToolPath {
     param([string]$ToolName)
     $projTools = Join-Path $localRepo "tools\$ToolName"
     if (Test-Path $projTools) { return $projTools }
-    $globalTools = "C:\snapshots\tools\$ToolName"
+    $globalTools = Join-Path $PSScriptRoot "tools\$ToolName"
     if (Test-Path $globalTools) { return $globalTools }
     $cmd = Get-Command $ToolName -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
-    $scriptDirTool = Join-Path "C:\snapshots" "tools\$ToolName"
-    if (Test-Path $scriptDirTool) { return $scriptDirTool }
     return $ToolName # Fallback to path execution
 }
 
@@ -105,7 +104,7 @@ Write-Host "Source Snapshot   : $SnapshotName"                            -Foreg
 # ----------------------------------------------------
 # PRE-DEPLOYMENT: Local Restore of Selected Snapshot
 # ----------------------------------------------------
-if ($SnapshotName) {
+if ($SnapshotName -and -not $GitOnly) {
     $snapsPath = Join-Path $localRepo "Snapshots"
     $snapshotDir = Join-Path $snapsPath $SnapshotName
     if (-not (Test-Path $snapshotDir)) {
@@ -122,7 +121,7 @@ if ($SnapshotName) {
     }
     
     Write-Host "`n>>> [PRE-DEPLOYMENT] Restoring snapshot '$SnapshotName' locally prior to deployment..." -ForegroundColor Yellow
-    $restoreScript = "C:\snapshots\Restore-Snapshot.ps1"
+    $restoreScript = Join-Path $PSScriptRoot "Restore-Snapshot.ps1"
     if (-not (Test-Path $restoreScript)) {
         throw "Local restore script not found at $restoreScript"
     }
@@ -133,9 +132,10 @@ if ($SnapshotName) {
 }
 
 # ----------------------------------------------------
-# STEP 1/5: Local Staging & Commit (code only — no DB in git)
+# STEP 1: Local Staging & Commit
 # ----------------------------------------------------
-Write-Host "`n>>> [STEP 1/5] Staging and committing changes..." -ForegroundColor Cyan
+$stepTotal = if ($GitOnly) { "2" } else { "5" }
+Write-Host "`n>>> [STEP 1/${stepTotal}] Staging and committing changes..." -ForegroundColor Cyan
 Write-Host "[PROGRESS] 10% (Checking repository status...)"
 
 # Helper function to read compose env variables
@@ -189,11 +189,11 @@ $localCommitHash = (git -C $localRepo rev-parse HEAD).Trim()
 Write-Host "Target deployment commit: $localCommitHash" -ForegroundColor White
 
 # ----------------------------------------------------
-# STEP 2/5: Push to GitHub
+# STEP 2: Push to GitHub
 # ----------------------------------------------------
 $activeBranch = (git -C $localRepo branch --show-current).Trim()
 if (-not $activeBranch) { $activeBranch = "main" }
-Write-Host "`n>>> [STEP 2/5] Pushing to GitHub (origin/$activeBranch)..." -ForegroundColor Cyan
+Write-Host "`n>>> [STEP 2/${stepTotal}] Pushing to GitHub (origin/$activeBranch)..." -ForegroundColor Cyan
 Write-Host "[PROGRESS] 20% (Pushing commits to remote...)"
 
 # Run git push
@@ -211,10 +211,18 @@ if ($exitCode -ne 0) {
     Write-Host "Successfully pushed to GitHub repository." -ForegroundColor Green
 }
 
+# If GitOnly mode, we're done after push
+if ($GitOnly) {
+    Write-Host "`n[PROGRESS] 100% (Git push completed successfully)"
+    Write-Host "`n[Recovery State Completed...]" -ForegroundColor Green
+    Write-Host "Git push to origin/$activeBranch completed. Commit: $localCommitHash" -ForegroundColor Green
+    exit 0
+}
+
 # ----------------------------------------------------
-# STEP 3/5: SCP snapshot directly to VPS (Snapshot Deploy only)
+# STEP 3: SCP snapshot directly to VPS (Snapshot Deploy only)
 # ----------------------------------------------------
-Write-Host "`n>>> [STEP 3/5] Database snapshot transfer..." -ForegroundColor Cyan
+Write-Host "`n>>> [STEP 3/${stepTotal}] Database snapshot transfer..." -ForegroundColor Cyan
 
 if ($OverwriteDatabase) {
     Write-Host "[PROGRESS] 30% (Preparing database snapshot...)"
@@ -311,7 +319,7 @@ if ($OverwriteDatabase) {
 # ----------------------------------------------------
 # STEP 4/5: Monitor CI/CD synchronization on VPS
 # ----------------------------------------------------
-Write-Host "`n>>> [STEP 4/5] Monitoring GitHub Actions CI/CD on VPS..." -ForegroundColor Cyan
+Write-Host "`n>>> [STEP 4/${stepTotal}] Monitoring GitHub Actions CI/CD on VPS..." -ForegroundColor Cyan
 Write-Host "Polling VPS to confirm deploy-status.json matches target commit..." -ForegroundColor Yellow
 
 $vpsSynced = $false
@@ -368,7 +376,7 @@ if (-not $vpsSynced) {
 # ----------------------------------------------------
 # STEP 5/5: Health and Parity Check
 # ----------------------------------------------------
-Write-Host "`n>>> [STEP 5/5] Verifying production health and parity..." -ForegroundColor Cyan
+Write-Host "`n>>> [STEP 5/${stepTotal}] Verifying production health and parity..." -ForegroundColor Cyan
 Write-Host "[PROGRESS] 80% (Checking VPS container health...)"
 
 $containers = @("mysql", "redis", "php", "nginx")

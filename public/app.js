@@ -44,16 +44,24 @@ const gitDeployForm = document.getElementById('git-deploy-form');
 const gitCommitMessage = document.getElementById('git-commit-message');
 const gitDeployBtn = document.getElementById('git-deploy-btn');
 const gitStepper = document.getElementById('git-stepper');
-const gitOverwriteDb = document.getElementById('git-overwrite-db');
-const gitDbConfirmGroup = document.getElementById('git-db-confirm-group');
-const gitDbConfirmInput = document.getElementById('git-db-confirm-input');
+// File progress bar elements
+const gitFileProgressContainer = document.getElementById('git-file-progress-container');
+const gitFileProgressText = document.getElementById('git-file-progress-text');
+const gitFileProgressBar = document.getElementById('git-file-progress-bar');
+// Version parity elements
+const gitVersionsRefreshBtn = document.getElementById('git-versions-refresh-btn');
+const gitParityIndicator = document.getElementById('git-parity-indicator');
+const gitParityText = document.getElementById('git-parity-text');
+const gitVersionLocal = document.getElementById('git-version-local');
+const gitVersionRemote = document.getElementById('git-version-remote');
+const gitVersionServer = document.getElementById('git-version-server');
+const gitVersionLocalIcon = document.getElementById('git-version-local-icon');
+const gitVersionRemoteIcon = document.getElementById('git-version-remote-icon');
+const gitVersionServerIcon = document.getElementById('git-version-server-icon');
 
-// Stepper Step Elements
+// Stepper Step Elements (2-step git push)
 const stepGitCommit = document.getElementById('step-git-commit');
 const stepGitPush   = document.getElementById('step-git-push');
-const stepGitScp    = document.getElementById('step-git-scp');
-const stepGitCicd   = document.getElementById('step-git-cicd');
-const stepGitVerify = document.getElementById('step-git-verify');
 
 // Overview Tab Metrics (Moved to Health & Parity)
 const overviewDir = document.getElementById('overview-dir');
@@ -362,6 +370,7 @@ navItems.forEach(item => {
       loadSettings();
     } else if (targetTab === 'git') {
       loadGitStatus();
+      loadVersionParity();
     }
   });
 });
@@ -417,7 +426,7 @@ async function loadProjects() {
       await loadProjectSnapshots(currentProject);
       await loadSettings();
       await loadGitStatus();
-      
+      loadVersionParity();
       checkLocalPorts();
       const activeTabItem = document.querySelector('.nav-item.active');
       const activeTab = activeTabItem ? activeTabItem.getAttribute('data-tab') : '';
@@ -665,6 +674,23 @@ async function loadGitStatus() {
     if (gitModifiedCount) gitModifiedCount.textContent = data.modifiedCount || '0';
     if (gitUntrackedCount) gitUntrackedCount.textContent = data.untrackedCount || '0';
 
+    const totalChanged = (data.modifiedCount || 0) + (data.untrackedCount || 0);
+    const totalFiles = (data.files && data.files.length) || 0;
+
+    // Update file progress bar
+    if (gitFileProgressContainer && totalFiles > 0) {
+      gitFileProgressContainer.style.display = 'block';
+      if (gitFileProgressText) {
+        gitFileProgressText.textContent = `${totalChanged} / ${totalFiles}`;
+      }
+      if (gitFileProgressBar) {
+        const pct = totalFiles > 0 ? Math.round((totalChanged / totalFiles) * 100) : 0;
+        gitFileProgressBar.style.width = `${pct}%`;
+      }
+    } else if (gitFileProgressContainer) {
+      gitFileProgressContainer.style.display = 'none';
+    }
+
     gitFilesContainer.innerHTML = '';
     if (!data.files || data.files.length === 0) {
       gitFilesContainer.innerHTML = '<li class="git-empty-state">No modified or untracked files. Working directory clean.</li>';
@@ -697,10 +723,15 @@ async function loadGitStatus() {
 
 // --- Stepper Controls helper ---
 function resetStepper() {
-  const steps = [stepGitCommit, stepGitPush, stepGitScp, stepGitCicd, stepGitVerify];
+  const steps = [stepGitCommit, stepGitPush];
   steps.forEach(step => {
     if (step) step.className = 'monitor-step step-pending';
   });
+  // Reset progress text
+  const stepProgressCommit = document.getElementById('step-progress-commit');
+  const stepProgressPush = document.getElementById('step-progress-push');
+  if (stepProgressCommit) stepProgressCommit.textContent = '';
+  if (stepProgressPush) stepProgressPush.textContent = '';
 }
 
 function setStepStatus(stepElement, status) {
@@ -709,52 +740,49 @@ function setStepStatus(stepElement, status) {
 }
 
 function updateStepperFromLog(text) {
-  // STEP 1/5 — Local Commit
-  if (text.includes('[STEP 1/5]')) {
-    setStepStatus(stepGitCommit, 'running');
-  } else if (text.includes('Changes committed successfully') || text.includes('Working tree clean')) {
+  // Detect step format: [STEP X/Y] where Y is 2 or 5
+  const stepMatch = text.match(/\[STEP (\d+)\/(\d+)\]/);
+  if (stepMatch) {
+    const stepNum = parseInt(stepMatch[1]);
+    // Mark prior steps as completed, current as running
+    if (stepNum >= 1) {
+      if (stepNum > 1) setStepStatus(stepGitCommit, 'completed');
+      if (stepNum === 1) setStepStatus(stepGitCommit, 'running');
+    }
+    if (stepNum >= 2) {
+      if (stepNum > 2) setStepStatus(stepGitPush, 'completed');
+      if (stepNum === 2) setStepStatus(stepGitPush, 'running');
+    }
+    // Update progress percentage
+    const progressMatch = text.match(/\[PROGRESS\]\s*(\d+)%/);
+    if (progressMatch) {
+      const pct = parseInt(progressMatch[1]);
+      // Determine which step has the progress
+      let progressEl = null;
+      if (stepNum === 1) progressEl = document.getElementById('step-progress-commit');
+      if (stepNum === 2) progressEl = document.getElementById('step-progress-push');
+      if (progressEl) {
+        progressEl.textContent = `${pct}%`;
+        progressEl.style.color = pct >= 100 ? 'var(--green)' : 'var(--text-desc)';
+      }
+    }
+    return;
+  }
+  // Completion detection
+  if (text.includes('Changes committed successfully') || text.includes('Working tree clean')) {
     setStepStatus(stepGitCommit, 'completed');
   }
-  // STEP 2/5 — Push
-  else if (text.includes('[STEP 2/5]')) {
+  if (text.includes('Successfully pushed to GitHub') || text.includes('GitHub remote is already up to date')) {
     setStepStatus(stepGitCommit, 'completed');
-    setStepStatus(stepGitPush, 'running');
-  } else if (text.includes('Successfully pushed to GitHub') || text.includes('GitHub remote is already up to date')) {
     setStepStatus(stepGitPush, 'completed');
   }
-  // STEP 3/5 — SCP Snapshot
-  else if (text.includes('[STEP 3/5]')) {
+  if (text.includes('[Recovery State Completed...]')) {
     setStepStatus(stepGitCommit, 'completed');
     setStepStatus(stepGitPush, 'completed');
-    setStepStatus(stepGitScp, 'running');
-  } else if (text.includes('Normal deploy') && text.includes('stale database')) {
-    // Normal deploy — SCP step is a no-op, mark skipped (completed immediately)
-    setStepStatus(stepGitScp, 'completed');
-  } else if (text.includes('Snapshot uploaded to VPS successfully')) {
-    setStepStatus(stepGitScp, 'completed');
-  } else if (text.includes('SCP upload failed')) {
-    setStepStatus(stepGitScp, 'failed');
   }
-  // STEP 4/5 — CI/CD
-  else if (text.includes('[STEP 4/5]')) {
+  if (text.includes('[Recovery State Completed with warnings...]')) {
     setStepStatus(stepGitCommit, 'completed');
-    setStepStatus(stepGitPush, 'completed');
-    setStepStatus(stepGitScp, 'completed');
-    setStepStatus(stepGitCicd, 'running');
-  } else if (text.includes('SUCCESS: VPS code has fully deployed')) {
-    setStepStatus(stepGitCicd, 'completed');
-  }
-  // STEP 5/5 — Health & Parity
-  else if (text.includes('[STEP 5/5]')) {
-    setStepStatus(stepGitCommit, 'completed');
-    setStepStatus(stepGitPush, 'completed');
-    setStepStatus(stepGitScp, 'completed');
-    setStepStatus(stepGitCicd, 'completed');
-    setStepStatus(stepGitVerify, 'running');
-  } else if (text.includes('[Recovery State Completed...]')) {
-    setStepStatus(stepGitVerify, 'completed');
-  } else if (text.includes('[Recovery State Completed with warnings...]')) {
-    setStepStatus(stepGitVerify, 'failed');
+    setStepStatus(stepGitPush, 'failed');
   }
 }
 
@@ -882,6 +910,7 @@ function handleTaskCompleted(code) {
       showToast(`Deployment pipeline failed with exit code: ${code}`, 'error');
     }
     loadGitStatus();
+    loadVersionParity();
   } else {
     if (code === 0) {
       showToast('Task completed successfully!', 'success');
@@ -980,45 +1009,25 @@ if (settingsForm) {
 function validateGitForm() {
   if (activeTask.status === 'running') return;
   const commitMsg = gitCommitMessage ? gitCommitMessage.value.trim() : '';
-  const needsOverwrite = gitOverwriteDb ? gitOverwriteDb.checked : false;
-  const isConfirmed = gitDbConfirmInput ? gitDbConfirmInput.value.trim().toUpperCase() === 'OVERWRITE' : false;
-
-  const gitSelect = document.getElementById('git-snapshot-select');
-  const snapshotSelected = gitSelect ? gitSelect.value : '';
-
-  const isDisabled = !commitMsg || !snapshotSelected || (needsOverwrite && !isConfirmed);
+  const isDisabled = !commitMsg;
   if (gitDeployBtn) {
     gitDeployBtn.disabled = isDisabled;
   }
 }
 
-// --- Action: Trigger Git Deployment ---
+// --- Action: Trigger Git Push ---
 if (gitDeployForm) {
   gitDeployForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     if (activeTask.status === 'running') {
-      showToast('A deployment or backup task is currently executing.', 'warning');
+      showToast('A task is currently executing.', 'warning');
       return;
     }
 
     const commitMessage = gitCommitMessage.value.trim();
     if (!commitMessage) {
-      showToast('A commit message is required to deploy.', 'warning');
-      return;
-    }
-
-    const overwriteDb = gitOverwriteDb ? gitOverwriteDb.checked : false;
-    if (overwriteDb && (!gitDbConfirmInput || gitDbConfirmInput.value.trim().toUpperCase() !== 'OVERWRITE')) {
-      showToast('Please type OVERWRITE to confirm database replacement.', 'warning');
-      return;
-    }
-
-    const gitSelect = document.getElementById('git-snapshot-select');
-    const snapshotName = gitSelect ? gitSelect.value : '';
-
-    if (!snapshotName) {
-      showToast('A recovery snapshot must be selected to initiate deployment.', 'warning');
+      showToast('A commit message is required.', 'warning');
       return;
     }
 
@@ -1027,57 +1036,132 @@ if (gitDeployForm) {
     resetStepper();
 
     try {
-      const response = await fetch('/api/git/deploy', {
+      const response = await fetch('/api/git/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commitMessage, overwriteDb, snapshotName, project: currentProject })
+        body: JSON.stringify({ commitMessage, project: currentProject })
       });
 
       if (response.ok) {
-        showToast('Git deployment pipeline initiated. Monitoring progress...', 'success');
+        showToast('Git push started. Monitoring progress...', 'success');
         gitCommitMessage.value = '';
-        if (gitOverwriteDb) gitOverwriteDb.checked = false;
-        if (gitDbConfirmGroup) gitDbConfirmGroup.style.display = 'none';
-        if (gitDbConfirmInput) gitDbConfirmInput.value = '';
         validateGitForm();
       } else {
         const err = await response.json();
-        showToast(`Deployment failed: ${err.error}`, 'error');
+        showToast(`Push failed: ${err.error}`, 'error');
         setStepStatus(stepGitCommit, 'failed');
       }
     } catch (err) {
-      showToast('Failed to contact server to trigger deployment.', 'error');
+      showToast('Failed to contact server.', 'error');
       setStepStatus(stepGitCommit, 'failed');
     }
   });
 }
 
 // Git Deployment form input validation listeners
-if (gitOverwriteDb) {
-  gitOverwriteDb.addEventListener('change', (e) => {
-    if (e.target.checked) {
-      if (gitDbConfirmGroup) {
-        gitDbConfirmGroup.style.display = 'block';
-      }
-      if (gitDbConfirmInput) {
-        gitDbConfirmInput.value = '';
-        gitDbConfirmInput.focus();
-      }
-    } else {
-      if (gitDbConfirmGroup) {
-        gitDbConfirmGroup.style.display = 'none';
-      }
-    }
-    validateGitForm();
-  });
-}
-
-if (gitDbConfirmInput) {
-  gitDbConfirmInput.addEventListener('input', validateGitForm);
-}
-
 if (gitCommitMessage) {
   gitCommitMessage.addEventListener('input', validateGitForm);
+}
+
+// --- Load Version Parity (local vs remote vs server) ---
+async function loadVersionParity() {
+  if (!currentProject) return;
+
+  // Update UI to loading state
+  if (gitParityText) gitParityText.textContent = 'Checking versions...';
+  if (gitParityIndicator) gitParityIndicator.style.background = 'var(--border-subtle)';
+  if (gitVersionLocal) gitVersionLocal.textContent = '...';
+  if (gitVersionRemote) gitVersionRemote.textContent = '...';
+  if (gitVersionServer) gitVersionServer.textContent = '...';
+
+  // Reset icons
+  [gitVersionLocalIcon, gitVersionRemoteIcon, gitVersionServerIcon].forEach(el => {
+    if (el) el.innerHTML = '';
+  });
+
+  try {
+    const response = await fetch(`/api/git/versions?project=${currentProject}`);
+    if (!response.ok) throw new Error('API Error');
+    const data = await response.json();
+
+    // Update hash displays
+    if (gitVersionLocal) gitVersionLocal.textContent = data.localShort || '—';
+    if (gitVersionRemote) gitVersionRemote.textContent = data.remoteShort || '—';
+    if (gitVersionServer) gitVersionServer.textContent = data.serverShort || '—';
+
+    // Update individual match icons
+    const checkIcon = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="var(--green)" d="M12 2C6.5 2 2 6.5 2 12S6.5 22 12 22 22 17.5 22 12 17.5 2 12 2M10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z"/></svg>';
+    const crossIcon = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="var(--red)" d="M12 2C6.47 2 2 6.47 2 12S6.47 22 12 22 22 17.53 22 12 17.53 2 12 2M17 15.59L15.59 17L12 13.41L8.41 17L7 15.59L10.59 12L7 8.41L8.41 7L12 10.59L15.59 7L17 8.41L13.41 12L17 15.59Z"/></svg>';
+    const dashIcon = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="var(--text-desc)" d="M20 13H4V11H20V13Z"/></svg>';
+
+    // Determine icon for each slot
+    if (data.local && data.remote && data.local === data.remote) {
+      if (gitVersionLocalIcon) gitVersionLocalIcon.innerHTML = checkIcon;
+      if (gitVersionRemoteIcon) gitVersionRemoteIcon.innerHTML = checkIcon;
+    } else if (data.local && data.remote) {
+      if (gitVersionLocalIcon) gitVersionLocalIcon.innerHTML = crossIcon;
+      if (gitVersionRemoteIcon) gitVersionRemoteIcon.innerHTML = crossIcon;
+    } else {
+      if (gitVersionLocalIcon) gitVersionLocalIcon.innerHTML = dashIcon;
+      if (gitVersionRemoteIcon) gitVersionRemoteIcon.innerHTML = dashIcon;
+    }
+
+    if (data.server && data.local && data.server === data.local) {
+      if (gitVersionServerIcon) gitVersionServerIcon.innerHTML = checkIcon;
+    } else if (data.server) {
+      if (gitVersionServerIcon) gitVersionServerIcon.innerHTML = crossIcon;
+    } else {
+      if (gitVersionServerIcon) gitVersionServerIcon.innerHTML = dashIcon;
+    }
+
+    // Update parity banner
+    if (data.parity) {
+      if (gitParityIndicator) gitParityIndicator.style.background = 'var(--green)';
+      if (gitParityText) {
+        gitParityText.textContent = 'All three versions match — parity achieved. Server is ready for testing.';
+        gitParityText.style.color = 'var(--green)';
+      }
+    } else {
+      if (gitParityIndicator) gitParityIndicator.style.background = 'var(--yellow)';
+      if (gitParityText) {
+        if (!data.remote) {
+          gitParityText.textContent = 'Could not reach GitHub remote. Check network.';
+        } else if (!data.server) {
+          gitParityText.textContent = 'Could not reach production server. Check SSH/network.';
+        } else if (!data.local) {
+          gitParityText.textContent = 'Local git repository not found.';
+        } else {
+          gitParityText.textContent = 'Versions are out of sync. Push changes or wait for CI/CD.';
+        }
+        gitParityText.style.color = 'var(--yellow)';
+      }
+    }
+
+    // Highlight matching boxes
+    const allBoxes = [
+      document.getElementById('git-version-local-box'),
+      document.getElementById('git-version-remote-box'),
+      document.getElementById('git-version-server-box')
+    ];
+    allBoxes.forEach(box => {
+      if (box) box.style.borderColor = data.parity ? 'var(--green)' : 'var(--border-subtle)';
+    });
+
+  } catch (err) {
+    if (gitParityText) {
+      gitParityText.textContent = 'Failed to check version parity.';
+      gitParityText.style.color = 'var(--red)';
+    }
+    if (gitParityIndicator) gitParityIndicator.style.background = 'var(--red)';
+  }
+}
+
+// Version parity refresh button
+if (gitVersionsRefreshBtn) {
+  gitVersionsRefreshBtn.addEventListener('click', () => {
+    loadVersionParity();
+    showToast('Refreshing version parity...', 'info');
+  });
 }
 
 // --- Submit Snapshot Creation to API ---
@@ -1211,6 +1295,7 @@ projectSelect.addEventListener('change', async (e) => {
   await loadProjectSnapshots(currentProject);
   await loadSettings();
   await loadGitStatus();
+  loadVersionParity();
   checkLocalPorts();
   const activeTabItem = document.querySelector('.nav-item.active');
   if (activeTabItem && activeTabItem.getAttribute('data-tab') === 'parity') {

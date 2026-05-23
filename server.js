@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const os = require('os');
 
 const PORT = 3050;
-const SNAPSHOTS_ROOT = 'C:\\snapshots';
+const SNAPSHOTS_ROOT = __dirname;
 const PROJECTS_FILE = path.join(SNAPSHOTS_ROOT, 'projects.json');
 
 function loadProjects() {
@@ -1246,7 +1246,7 @@ const server = http.createServer((req, res) => {
         }
 
         // Trigger registry refresh
-        exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\snapshots\\Refresh-Registry.ps1', () => {
+        exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + path.join(SNAPSHOTS_ROOT, 'Refresh-Registry.ps1') + '"', () => {
           try {
             watchConfigChanges(targetPath, name);
           } catch (e) {}
@@ -1293,7 +1293,7 @@ const server = http.createServer((req, res) => {
     }
 
     // Trigger registry refresh
-    exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\snapshots\\Refresh-Registry.ps1', () => {
+    exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + path.join(SNAPSHOTS_ROOT, 'Refresh-Registry.ps1') + '"', () => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, projects: projs.map(p => p.name), details: projs }));
     });
@@ -1310,7 +1310,7 @@ const server = http.createServer((req, res) => {
     }
 
     // First trigger Refresh-Registry.ps1 to make sure json is completely updated
-    exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\snapshots\\Refresh-Registry.ps1', (err) => {
+    exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + path.join(SNAPSHOTS_ROOT, 'Refresh-Registry.ps1') + '"', (err) => {
       if (err) {
         console.error('Refresh-Registry.ps1 failed', err);
       }
@@ -1636,7 +1636,7 @@ const server = http.createServer((req, res) => {
       return new Promise((resolve) => {
         const plinkTool = fs.existsSync(path.join(localRepo, 'tools', 'plink.exe')) 
           ? path.join(localRepo, 'tools', 'plink.exe') 
-          : (fs.existsSync('C:\\snapshots\\tools\\plink.exe') ? 'C:\\snapshots\\tools\\plink.exe' : 'plink.exe');
+          : (fs.existsSync(path.join(SNAPSHOTS_ROOT, 'tools', 'plink.exe')) ? path.join(SNAPSHOTS_ROOT, 'tools', 'plink.exe') : 'plink.exe');
         const escapedCmd = cmd.replace(/"/g, '\\"');
         const plinkCmd = `"${plinkTool}" -ssh ${settings.sshUser}@${settings.sshHost} -batch -hostkey "${settings.sshHostKey}" -pw "${settings.sshPassword}" "${escapedCmd}"`;
         
@@ -2009,7 +2009,7 @@ const server = http.createServer((req, res) => {
       }
 
       // Re-run registry refresh
-      exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\snapshots\\Refresh-Registry.ps1', (refreshErr) => {
+      exec('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + path.join(SNAPSHOTS_ROOT, 'Refresh-Registry.ps1') + '"', (refreshErr) => {
         if (refreshErr) {
           console.error('Refresh-Registry.ps1 failed after delete', refreshErr);
         }
@@ -2303,7 +2303,7 @@ const server = http.createServer((req, res) => {
       return new Promise((resolve) => {
         const plinkTool = fs.existsSync(path.join(localRepo, 'tools', 'plink.exe')) 
           ? path.join(localRepo, 'tools', 'plink.exe') 
-          : (fs.existsSync('C:\\snapshots\\tools\\plink.exe') ? 'C:\\snapshots\\tools\\plink.exe' : 'plink.exe');
+          : (fs.existsSync(path.join(SNAPSHOTS_ROOT, 'tools', 'plink.exe')) ? path.join(SNAPSHOTS_ROOT, 'tools', 'plink.exe') : 'plink.exe');
         const escapedCmd = cmd.replace(/"/g, '\\"');
         const plinkCmd = `"${plinkTool}" -ssh ${settings.sshUser}@${settings.sshHost} -batch -hostkey "${settings.sshHostKey}" -pw "${settings.sshPassword}" "${escapedCmd}"`;
         
