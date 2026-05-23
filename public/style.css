@@ -77,6 +77,12 @@ body {
   gap: 12px;
 }
 
+.sidebar-logo-img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
 .do-logo {
   width: 42px !important;
   height: 42px !important;
