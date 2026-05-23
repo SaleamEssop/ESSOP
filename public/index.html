@@ -563,6 +563,24 @@
                   <textarea id="git-commit-message" placeholder="e.g. Fixed wp-gallery asset port leak issues" rows="3" required></textarea>
                 </div>
 
+                <div class="form-checkboxes" style="margin-bottom: 16px;">
+                  <label class="switch-container">
+                    <input type="checkbox" id="git-include-db">
+                    <span class="switch-slider"></span>
+                    <span class="switch-label-text">
+                      <strong>Include Local Database</strong>
+                      <span class="switch-desc">Dumps and deploys the local database to production.</span>
+                    </span>
+                  </label>
+                </div>
+
+                <div id="git-db-warning" class="alert-box alert-danger" style="display: none; margin-bottom: 16px;">
+                  <svg viewBox="0 0 24 24" width="16" height="16" style="display: inline-block; vertical-align: middle; margin-right: 6px; color: var(--color-danger);">
+                    <path fill="currentColor" d="M12,2L1,21H23L12,2M12,6L19.53,19H4.47L12,6M11,9V13H13V9H11M11,15V17H13V15H11Z"/>
+                  </svg>
+                  <span style="vertical-align: middle;"><strong>WARNING:</strong> This will overwrite the live production database with the local database contents!</span>
+                </div>
+
                 <button type="submit" id="git-deploy-btn" class="btn btn-primary btn-full flex-center font-bold">
                   <svg viewBox="0 0 24 24" width="18" height="18" style="margin-right: 6px;">
                     <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>

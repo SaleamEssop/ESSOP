@@ -44,6 +44,8 @@ const gitFilesContainer = document.getElementById('git-files-container');
 const gitDeployForm = document.getElementById('git-deploy-form');
 const gitCommitMessage = document.getElementById('git-commit-message');
 const gitDeployBtn = document.getElementById('git-deploy-btn');
+const gitIncludeDb = document.getElementById('git-include-db');
+const gitDbWarning = document.getElementById('git-db-warning');
 const gitStepper = document.getElementById('git-stepper');
 // File progress bar elements
 const gitFileProgressContainer = document.getElementById('git-file-progress-container');
@@ -844,6 +846,7 @@ function updateTaskStatus(task) {
     }
     if (gitRefreshBtn) gitRefreshBtn.disabled = true;
     if (gitCommitMessage) gitCommitMessage.disabled = true;
+    if (gitIncludeDb) gitIncludeDb.disabled = true;
     
     // Update sidebar text
     sidebarDot.className = 'status-dot dot-running';
@@ -869,14 +872,15 @@ function updateTaskStatus(task) {
     if (gitDeployBtn) {
       gitDeployBtn.innerHTML = `
         <svg viewBox="0 0 24 24" width="18" height="18" style="margin-right: 6px;">
-          <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2M11 16H13V18H11V16M11 6H13V14H11V6Z"/>
+          <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
         </svg>
-        Push to Production
+        Push to Git
       `;
       validateGitForm();
     }
     if (gitRefreshBtn) gitRefreshBtn.disabled = false;
     if (gitCommitMessage) gitCommitMessage.disabled = false;
+    if (gitIncludeDb) gitIncludeDb.disabled = false;
 
     // Reset status bars
     sidebarDot.className = 'status-dot dot-idle';
@@ -1032,6 +1036,8 @@ if (gitDeployForm) {
       return;
     }
 
+    const includeDb = gitIncludeDb ? gitIncludeDb.checked : false;
+
     // Show and reset stepper
     if (gitStepper) gitStepper.style.display = 'block';
     resetStepper();
@@ -1040,12 +1046,16 @@ if (gitDeployForm) {
       const response = await fetch('/api/git/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commitMessage, project: currentProject })
+        body: JSON.stringify({ commitMessage, project: currentProject, overwriteDb: includeDb })
       });
 
       if (response.ok) {
         showToast('Git push started. Monitoring progress...', 'success');
         gitCommitMessage.value = '';
+        if (gitIncludeDb) {
+          gitIncludeDb.checked = false;
+          if (gitDbWarning) gitDbWarning.style.display = 'none';
+        }
         validateGitForm();
       } else {
         const err = await response.json();
@@ -1062,6 +1072,12 @@ if (gitDeployForm) {
 // Git Deployment form input validation listeners
 if (gitCommitMessage) {
   gitCommitMessage.addEventListener('input', validateGitForm);
+}
+
+if (gitIncludeDb && gitDbWarning) {
+  gitIncludeDb.addEventListener('change', () => {
+    gitDbWarning.style.display = gitIncludeDb.checked ? 'block' : 'none';
+  });
 }
 
 // --- Load Version Parity (local vs remote vs server) ---

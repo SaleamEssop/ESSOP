@@ -1730,7 +1730,7 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        const { commitMessage, project } = payload;
+        const { commitMessage, project, overwriteDb } = payload;
 
         const activeProject = project || 'mypools';
         const projectPath = getProjectPath(activeProject);
@@ -1745,7 +1745,11 @@ const server = http.createServer((req, res) => {
           args.push('-CommitMessage', commitMessage);
         }
         args.push('-SourcePath', projectPath);
-        args.push('-GitOnly');
+        if (overwriteDb) {
+          args.push('-OverwriteDatabase');
+        } else {
+          args.push('-GitOnly');
+        }
 
         runPowerShellScript('Deploy-Git.ps1', args);
 
