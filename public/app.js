@@ -8,6 +8,7 @@ let activeDeleteSnapshot = null;
 let sseSource = null;
 let projectFiles = [];
 const excludedPaths = new Set();
+let gitParityInterval = null;
 
 // DOM Elements - Selector Registry
 const projectSelect = document.getElementById('project-select');
@@ -1147,6 +1148,34 @@ async function loadVersionParity() {
       if (box) box.style.borderColor = data.parity ? 'var(--green)' : 'var(--border-subtle)';
     });
 
+    // CI/CD Live status tracking
+    const gitCicdBanner = document.getElementById('git-cicd-status-banner');
+    const gitCicdText = document.getElementById('git-cicd-status-text');
+
+    if (data.remote && data.server && data.remote !== data.server) {
+      if (gitCicdBanner) {
+        gitCicdBanner.style.display = 'flex';
+      }
+      if (gitCicdText) {
+        gitCicdText.textContent = `GitHub Actions CI/CD Pipeline is Active — Deploying commit ${data.remoteShort || '...'} to production server...`;
+      }
+      // Start auto-polling every 8 seconds if not already active
+      if (!gitParityInterval) {
+        gitParityInterval = setInterval(() => {
+          loadVersionParity();
+        }, 8000);
+      }
+    } else {
+      if (gitCicdBanner) {
+        gitCicdBanner.style.display = 'none';
+      }
+      // Clear interval when remote and server commits match (deployment complete)
+      if (gitParityInterval) {
+        clearInterval(gitParityInterval);
+        gitParityInterval = null;
+      }
+    }
+
   } catch (err) {
     if (gitParityText) {
       gitParityText.textContent = 'Failed to check version parity.';
@@ -1292,6 +1321,10 @@ confirmDeleteBtn.addEventListener('click', async () => {
 
 projectSelect.addEventListener('change', async (e) => {
   currentProject = e.target.value;
+  if (gitParityInterval) {
+    clearInterval(gitParityInterval);
+    gitParityInterval = null;
+  }
   await loadProjectSnapshots(currentProject);
   await loadSettings();
   await loadGitStatus();
