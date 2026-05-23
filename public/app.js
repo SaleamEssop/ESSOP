@@ -509,15 +509,18 @@ function renderSnapshotsTable() {
     } else if (levelVal === 'Medium') {
       levelBadge = '<span class="badge badge-teal">Medium (Code+DB)</span>';
     } else {
-      levelBadge = '<span class="badge badge-muted">Low (Code Only)</span>';
+      levelBadge = '<span class="badge badge-info">Low (Framework Rollback)</span>';
     }
 
     const typeBadge = snap.powered_off
       ? '<span class="badge badge-success">Consistent</span>'
       : '<span class="badge badge-warning">Live</span>';
 
+    const isLowFrameworkDb = snap.low_selective_db === true;
     const dbBadge = snap.database_included
-      ? '<span class="badge badge-teal">Database Included</span>'
+      ? (isLowFrameworkDb 
+          ? '<span class="badge badge-info">Framework DB</span>' 
+          : '<span class="badge badge-teal">Database Included</span>')
       : '<span class="badge badge-muted">No DB</span>';
 
     const filesBadge = snap.files_included

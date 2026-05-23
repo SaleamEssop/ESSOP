@@ -171,7 +171,61 @@ if (Test-Path $zipFile) {
 }
 
 $sqlFile = Join-Path $snapshotDir "database.sql"
-if (Test-Path $sqlFile) {
+$frameworkDataFile = Join-Path $snapshotDir "framework-data.sql"
+$isLowRestore = ($level -eq "Low")
+
+if ($isLowRestore -and (Test-Path $frameworkDataFile)) {
+    # ── LOW restore: safe upsert — preserves runtime data ──
+    Write-Host "`nStarting MySQL for LOW framework import..." -ForegroundColor Cyan
+    Write-Host "  LOW restore: preserving contractor runtime data, upserting framework tables only" -ForegroundColor Yellow
+    
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    if ($envFilePath -and (Test-Path $envFilePath)) {
+        podman-compose --env-file $envFilePath -f $composeFile -p $composeProject up -d mysql 2>&1 | Out-Null
+    } else {
+        podman-compose -f $composeFile -p $composeProject up -d mysql 2>&1 | Out-Null
+    }
+    $ErrorActionPreference = $prev
+    Start-Sleep -Seconds 20
+
+    $mysqlPod = @(podman ps --filter "label=io.podman.compose.project=$composeProject" --format "{{.Names}}" | Where-Object { $_ -match "mysql" } | Select-Object -First 1)
+    if (-not $mysqlPod) { throw "MySQL container failed to start." }
+
+    for ($i = 0; $i -lt 30; $i++) {
+        $h = podman inspect $mysqlPod --format '{{.State.Health.Status}}' 2>$null
+        if ($h -eq 'healthy') { break }
+        Start-Sleep -Seconds 2
+    }
+
+    $dbPass = if ($envVars['MYSQL_ROOT_PASSWORD']) { $envVars['MYSQL_ROOT_PASSWORD'] } else { "" }
+    $dbName = if ($envVars['MYSQL_DATABASE']) { $envVars['MYSQL_DATABASE'] } else { $Project }
+
+    # Step 1: Import schema (CREATE TABLE IF NOT EXISTS — safe, no DROPs)
+    if (Test-Path $sqlFile) {
+        Write-Host "  Importing schema (CREATE TABLE IF NOT EXISTS)..." -ForegroundColor DarkGray
+        Get-Content $sqlFile -Raw | podman exec -i $mysqlPod mariadb -uroot -p"$dbPass" $dbName 2>$null
+        Write-Host "  Schema imported safely (no tables dropped)." -ForegroundColor Green
+    }
+
+    # Step 2: Import framework data (REPLACE INTO — safe upsert)
+    Write-Host "  Importing framework data (REPLACE INTO - preserving runtime data)..." -ForegroundColor DarkGray
+    Get-Content $frameworkDataFile -Raw | podman exec -i $mysqlPod mariadb -uroot -p"$dbPass" $dbName 2>$null
+    Write-Host "  Framework data upserted: wp_options, wp_users, wp_usermeta." -ForegroundColor Green
+    Write-Host "  Contractor runtime data PRESERVED (posts, contractor CPTs, media intact)." -ForegroundColor Green
+
+    $localUrl = if ($envVars['LOCAL_URL']) { $envVars['LOCAL_URL'] } else { "http://127.0.0.1:$($envVars['APP_HTTP_PORT'])" }
+    "UPDATE wp_options SET option_value='$localUrl' WHERE option_name IN ('siteurl','home');" | podman exec -i $mysqlPod mariadb -uroot -p"$dbPass" $dbName 2>$null
+
+    Write-Host "Stopping MySQL..." -ForegroundColor DarkGray
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    if ($envFilePath -and (Test-Path $envFilePath)) {
+        podman-compose --env-file $envFilePath -f $composeFile -p $composeProject down 2>&1 | Out-Null
+    } else {
+        podman-compose -f $composeFile -p $composeProject down 2>&1 | Out-Null
+    }
+    $ErrorActionPreference = $prev
+} elseif (Test-Path $sqlFile) {
+    # ── Medium/High restore: full destructive import ──
     Write-Host "`nStarting MySQL for import..." -ForegroundColor Cyan
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     if ($envFilePath -and (Test-Path $envFilePath)) {

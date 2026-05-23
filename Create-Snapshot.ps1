@@ -117,8 +117,12 @@ if ($BackupLevel -notIn @("High", "Medium", "Low")) {
     $BackupLevel = "High"
 }
 
-if ($BackupLevel -eq "Low") {
-    $NoDatabase = $true
+# LOW: selective framework-only DB dump (wp_options data + schema only for rest)
+# Medium/High: full DB dump
+$LowSelectiveDb = ($BackupLevel -eq "Low")
+if ($LowSelectiveDb) {
+    # Override NoDatabase — LOW includes a selective framework dump
+    $NoDatabase = $false
 }
 
 $Source = Get-ProjectSourcePath -Proj $Project
@@ -272,15 +276,85 @@ if (-not $NoDatabase) {
             if ($detectDump -and $detectDump.Trim() -ne "") {
                 $dumpCmd = "mariadb-dump"
             }
-            podman exec $mysqlPod $dumpCmd -uroot -p"$dbPass" --single-transaction --quick --lock-tables=false $dbName 2>$null | Out-File -FilePath $dumpFile -Encoding UTF8 -ErrorAction SilentlyContinue
-
-            if ((Test-Path $dumpFile) -and (Get-Item $dumpFile).Length -gt 100) {
-                $dbDumped = $true
-                $dumpSize = "{0:N0} KB" -f ((Get-Item $dumpFile).Length / 1KB)
-                Write-Host "  Database dumped: $dumpSize" -ForegroundColor Green
+            if ($LowSelectiveDb) {
+                # ── LOW: Framework-only database export ──
+                # Two files:
+                #   database.sql        — schema only (CREATE TABLE IF NOT EXISTS, no DROPs, no data)
+                #   framework-data.sql  — REPLACE INTO for wp_options, wp_users, wp_usermeta (safe upsert)
+                Write-Host "  LOW snapshot: framework-only database export" -ForegroundColor DarkGray
+                
+                # Step 1: Schema dump with DROP TABLE IF EXISTS + CREATE TABLE, then post-process
+                $schemaTemp = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.sql'
+                podman exec $mysqlPod $dumpCmd -uroot -p"$dbPass" --no-data --single-transaction --quick --lock-tables=false $dbName 2>$null | Out-File -FilePath $schemaTemp -Encoding UTF8 -ErrorAction SilentlyContinue
+                
+                # Post-process: remove DROP TABLE, change CREATE TABLE to CREATE TABLE IF NOT EXISTS
+                $schemaContent = Get-Content $schemaTemp -Raw
+                $schemaContent = $schemaContent -replace 'DROP TABLE IF EXISTS `[^`]+`;\s*', ''
+                $schemaContent = $schemaContent -replace 'CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '
+                $schemaContent | Out-File -FilePath $dumpFile -Encoding UTF8 -NoNewline
+                Remove-Item $schemaTemp -Force -ErrorAction SilentlyContinue
+                Write-Host "  Schema exported (CREATE TABLE IF NOT EXISTS, no destructive DROPs)" -ForegroundColor DarkGray
+                
+                # Step 2: Framework data — REPLACE INTO for safe upsert (preserves runtime data)
+                $frameworkDataFile = Join-Path $snapshotDir "framework-data.sql"
+                "# LOW snapshot - framework data only (safe upsert, does NOT overwrite runtime data)`n" | Out-File -FilePath $frameworkDataFile -Encoding UTF8
+                
+                # wp_options: dump with INSERT, convert to REPLACE
+                $optsTemp = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.sql'
+                podman exec $mysqlPod $dumpCmd -uroot -p"$dbPass" --no-create-info --skip-triggers --single-transaction --quick --lock-tables=false $dbName wp_options 2>$null | Out-File -FilePath $optsTemp -Encoding UTF8 -ErrorAction SilentlyContinue
+                $optsContent = Get-Content $optsTemp -Raw
+                $optsContent = $optsContent -replace 'INSERT INTO ', 'REPLACE INTO '
+                $optsContent | Out-File -FilePath $frameworkDataFile -Append -Encoding UTF8
+                Remove-Item $optsTemp -Force -ErrorAction SilentlyContinue
+                
+                # wp_users
+                $usersTemp = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.sql'
+                podman exec $mysqlPod $dumpCmd -uroot -p"$dbPass" --no-create-info --skip-triggers --single-transaction --quick --lock-tables=false $dbName wp_users 2>$null | Out-File -FilePath $usersTemp -Encoding UTF8 -ErrorAction SilentlyContinue
+                $usersContent = Get-Content $usersTemp -Raw
+                $usersContent = $usersContent -replace 'INSERT INTO ', 'REPLACE INTO '
+                $usersContent | Out-File -FilePath $frameworkDataFile -Append -Encoding UTF8
+                Remove-Item $usersTemp -Force -ErrorAction SilentlyContinue
+                
+                # wp_usermeta
+                $usermetaTemp = [System.IO.Path]::GetTempFileName() -replace '\.tmp$', '.sql'
+                podman exec $mysqlPod $dumpCmd -uroot -p"$dbPass" --no-create-info --skip-triggers --single-transaction --quick --lock-tables=false $dbName wp_usermeta 2>$null | Out-File -FilePath $usermetaTemp -Encoding UTF8 -ErrorAction SilentlyContinue
+                $usermetaContent = Get-Content $usermetaTemp -Raw
+                $usermetaContent = $usermetaContent -replace 'INSERT INTO ', 'REPLACE INTO '
+                $usermetaContent | Out-File -FilePath $frameworkDataFile -Append -Encoding UTF8
+                Remove-Item $usermetaTemp -Force -ErrorAction SilentlyContinue
+                
+                Write-Host "  Framework data exported: wp_options, wp_users, wp_usermeta (REPLACE INTO - safe upsert)" -ForegroundColor Green
+                Write-Host "  Excluded: posts, contractor data, media, comments, operational state" -ForegroundColor DarkGray
             } else {
-                Write-Warning "Database dump appears empty or failed."
-                Remove-Item $dumpFile -Force -ErrorAction SilentlyContinue
+                # ── Medium/High: Full database dump ──
+                podman exec $mysqlPod $dumpCmd -uroot -p"$dbPass" --single-transaction --quick --lock-tables=false $dbName 2>$null | Out-File -FilePath $dumpFile -Encoding UTF8 -ErrorAction SilentlyContinue
+            }
+
+            if ($LowSelectiveDb) {
+                # LOW: verify schema file AND framework data file
+                $frameworkDataFile = Join-Path $snapshotDir "framework-data.sql"
+                $schemaOk = (Test-Path $dumpFile) -and (Get-Item $dumpFile).Length -gt 100
+                $frameworkOk = (Test-Path $frameworkDataFile) -and (Get-Item $frameworkDataFile).Length -gt 100
+                if ($schemaOk -and $frameworkOk) {
+                    $dbDumped = $true
+                    $schemaSize = "{0:N0} KB" -f ((Get-Item $dumpFile).Length / 1KB)
+                    $frameworkSize = "{0:N0} KB" -f ((Get-Item $frameworkDataFile).Length / 1KB)
+                    Write-Host "  Database schema: $schemaSize" -ForegroundColor Green
+                    Write-Host "  Framework data: $frameworkSize" -ForegroundColor Green
+                } else {
+                    Write-Warning "LOW database dump appears empty or failed."
+                    Remove-Item $dumpFile -Force -ErrorAction SilentlyContinue
+                    Remove-Item $frameworkDataFile -Force -ErrorAction SilentlyContinue
+                }
+            } else {
+                if ((Test-Path $dumpFile) -and (Get-Item $dumpFile).Length -gt 100) {
+                    $dbDumped = $true
+                    $dumpSize = "{0:N0} KB" -f ((Get-Item $dumpFile).Length / 1KB)
+                    Write-Host "  Database dumped: $dumpSize" -ForegroundColor Green
+                } else {
+                    Write-Warning "Database dump appears empty or failed."
+                    Remove-Item $dumpFile -Force -ErrorAction SilentlyContinue
+                }
             }
 
             if ($wasStopped) {
@@ -466,6 +540,7 @@ $metadata = @{
     description          = $Description
     containers_running   = $containersRunning
     database_included    = $dbDumped
+    low_selective_db     = $LowSelectiveDb
     files_count          = $fileCount
     size_bytes           = if (Test-Path $zipFile) { (Get-Item $zipFile).Length } else { 0 }
     source_path          = $Source
@@ -479,8 +554,26 @@ $metadata = @{
 $metadata | ConvertTo-Json -Depth 4 | Out-File -FilePath (Join-Path $snapshotDir "snapshot.json") -Encoding UTF8
 
 # recovery.md
+$dbDescription = if ($LowSelectiveDb) {
+    "framework-only (wp_options, wp_users, wp_usermeta data + schema for all tables)"
+} elseif ($dbDumped) {
+    "database.sql (full dump)"
+} else {
+    "not included"
+}
+
+$levelDescription = switch ($BackupLevel) {
+    "Low"    { "Safe development rollback - framework and application logic only. Does NOT overwrite contractor runtime data or uploads." }
+    "Medium" { "Code + database - excludes uploads and secrets. Suitable for git deployment." }
+    "High"   { "Complete recovery state - full disaster recovery image including uploads, secrets, and database." }
+    default  { "" }
+}
+
 $recoveryMd = @"
 # Recovery Snapshot - $timestamp
+
+## Level: $BackupLevel
+$levelDescription
 
 ## Description
 $Description
@@ -497,10 +590,11 @@ C:\snapshots\Restore-Snapshot.ps1 -Project $Project -SnapshotName $timestamp
 
 ## Contents
 - Project files: `project.zip` ($fileCount files)
-- Database: $(if ($dbDumped) { "database.sql" } else { "not included" })
+- Database: $dbDescription
 - Source: $Source
 - Compose: $composeProject
 $(if ($wasStopped) { "- Powered-off snapshot (consistent)" } else { "- Live snapshot" })
+$(if ($LowSelectiveDb) { "- Framework tables exported: wp_options, wp_users, wp_usermeta`n- Excluded: posts, contractor data, media, comments, operational state" } else { "" })
 
 ## Git
 - Branch: $gitBranch
