@@ -2778,8 +2778,8 @@ define( 'WP_SITEURL', $scheme . '://' . $http_host );`;
           const envFile = fs.existsSync(path.join(projectPath, '.env.local')) ? '.env.local' : '.env';
           const composeFiles = `-f compose.yml ${fs.existsSync(path.join(projectPath, 'compose.edge.yml')) ? '-f compose.edge.yml' : ''}`;
           
-          const downCmd = `podman compose ${composeFiles} --env-file ${envFile} down`;
-          const upCmd = `podman compose ${composeFiles} --env-file ${envFile} up -d`;
+          const downCmd = `podman-compose ${composeFiles} --env-file ${envFile} down`;
+          const upCmd = `podman-compose ${composeFiles} --env-file ${envFile} up -d`;
           
           activeTask.status = 'running';
           activeTask.type = 'deploy';

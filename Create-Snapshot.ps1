@@ -206,7 +206,7 @@ if (-not $Live -and $containersRunning) {
     Write-Host "`nStopping containers for consistent snapshot..." -ForegroundColor Cyan
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    podman compose --env-file $envFilePath -f $composeFile -p $composeProject down 2>&1 | Out-Null
+    podman-compose --env-file $envFilePath -f $composeFile -p $composeProject down 2>&1 | Out-Null
     $ErrorActionPreference = $prev
     $wasStopped = $true
     Write-Host "Containers stopped." -ForegroundColor Green
@@ -228,7 +228,7 @@ if (-not $NoDatabase) {
             Write-Host "  Starting MySQL temporarily for dump..." -ForegroundColor DarkGray
             $prev = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
-            podman compose --env-file $envFilePath -f $composeFile -p $composeProject up -d mysql 2>&1 | Out-Null
+            podman-compose --env-file $envFilePath -f $composeFile -p $composeProject up -d mysql 2>&1 | Out-Null
             $ErrorActionPreference = $prev
             Start-Sleep -Seconds 20
             
@@ -266,7 +266,7 @@ if (-not $NoDatabase) {
                 Write-Host "  Stopping MySQL..." -ForegroundColor DarkGray
                 $prev = $ErrorActionPreference
                 $ErrorActionPreference = "Continue"
-                podman compose --env-file $envFilePath -f $composeFile -p $composeProject down 2>&1 | Out-Null
+                podman-compose --env-file $envFilePath -f $composeFile -p $composeProject down 2>&1 | Out-Null
                 $ErrorActionPreference = $prev
             }
         } else {
@@ -424,7 +424,7 @@ if ($wasStopped) {
     Write-Host "`nRestarting containers..." -ForegroundColor Cyan
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    podman compose --env-file $envFilePath -f $composeFile -p $composeProject up -d 2>&1 | Out-Null
+    podman-compose --env-file $envFilePath -f $composeFile -p $composeProject up -d 2>&1 | Out-Null
     $ErrorActionPreference = $prev
     Write-Host "Containers restarted." -ForegroundColor Green
 }
