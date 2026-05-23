@@ -2769,6 +2769,50 @@ define( 'WP_SITEURL', $scheme . '://' . $http_host );`;
           return;
         }
 
+        if (type === 'heal-service') {
+          const service = payload.service;
+          if (!service || !/^[a-zA-Z0-9_\-]+$/.test(service)) {
+            handleError('Invalid service name.');
+            return;
+          }
+
+          if (activeTask.status === 'running') {
+            handleError('Another task is running. Please wait.');
+            return;
+          }
+
+          const envFile = fs.existsSync(path.join(projectPath, '.env.local')) ? '.env.local' : '.env';
+          const composeFiles = `-f compose.yml ${fs.existsSync(path.join(projectPath, 'compose.edge.yml')) ? '-f compose.edge.yml' : ''}`;
+          const upCmd = `podman-compose ${composeFiles} --env-file ${envFile} up -d ${service}`;
+
+          activeTask.status = 'running';
+          activeTask.type = 'deploy';
+          activeTask.project = project;
+
+          broadcast({ type: 'status', status: 'running', taskType: 'deploy', project: project });
+          broadcast({ type: 'log', text: `>>> Healing/Starting service "${service}" for ${project}...\n`, stream: 'stdout' });
+          broadcast({ type: 'log', text: `Executing: ${upCmd}\n`, stream: 'stdout' });
+
+          exec(upCmd, { cwd: projectPath }, (upErr, upStdout, upStderr) => {
+            activeTask.status = 'idle';
+            activeTask.type = null;
+            activeTask.project = null;
+            broadcast({ type: 'status', status: 'idle', taskType: null, project: null });
+
+            if (upErr) {
+              broadcast({ type: 'log', text: `Failed to heal service: ${upStderr || upErr.message}\n`, stream: 'stderr' });
+              broadcast({ type: 'done', code: 1 });
+              handleError(`Healing failed: ${upStderr || upErr.message}`);
+            } else {
+              broadcast({ type: 'log', text: `Up: ${upStdout}\n`, stream: 'stdout' });
+              broadcast({ type: 'log', text: `>>> Service "${service}" started successfully.\n`, stream: 'stdout' });
+              broadcast({ type: 'done', code: 0 });
+              handleSuccess(`Service "${service}" started successfully.`);
+            }
+          });
+          return;
+        }
+
         if (type === 'restart-stack') {
           if (activeTask.status === 'running') {
             handleError('Another task is running. Please wait.');

@@ -347,7 +347,9 @@ navItems.forEach(item => {
     currentTabTitle.textContent = item.textContent.trim();
 
     // Manage polling and fetch tab-specific data
-    if (targetTab === 'parity') {
+    if (targetTab === 'dashboard') {
+      startLocalHealthPolling();
+    } else if (targetTab === 'parity') {
       startStatsPolling();
       checkLocalPorts();
       startLocalHealthPolling();
@@ -418,9 +420,12 @@ async function loadProjects() {
       
       checkLocalPorts();
       const activeTabItem = document.querySelector('.nav-item.active');
-      if (activeTabItem && activeTabItem.getAttribute('data-tab') === 'parity') {
-        startStatsPolling();
+      const activeTab = activeTabItem ? activeTabItem.getAttribute('data-tab') : '';
+      if (activeTab === 'parity' || activeTab === 'dashboard') {
         startLocalHealthPolling();
+        if (activeTab === 'parity') {
+          startStatsPolling();
+        }
       }
     } else {
       currentProject = '';
@@ -1928,6 +1933,15 @@ function renderLocalContainers(containers) {
     const statusColor = isRunning ? '#10b981' : isStopped ? '#f43f5e' : '#64748b';
     const borderColor = isRunning ? 'rgba(16,185,129,0.25)' : isStopped ? 'rgba(244,63,94,0.25)' : 'var(--border-subtle)';
 
+    const healButtonHtml = !isRunning ? `
+      <button class="btn btn-secondary btn-xs heal-service-btn" data-service="${svc}" style="margin-top: 8px; font-size: 11px; padding: 4px 8px; width: fit-content; display: flex; align-items: center; gap: 4px;">
+        <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+        </svg>
+        Heal Service
+      </button>
+    ` : '';
+
     return `
       <div class="health-container-card" style="border-color: ${borderColor};">
         <div class="health-card-header">
@@ -1944,13 +1958,42 @@ function renderLocalContainers(containers) {
             ${statusLabel}
           </div>
         </div>
-        <div>
-          ${info.name ? `<div class="health-container-name">${info.name}</div>` : ''}
-          <div class="health-card-details">${info.rawStatus || 'No status available'}</div>
+        <div style="display: flex; flex-direction: column; justify-content: space-between; height: 100%;">
+          <div>
+            ${info.name ? `<div class="health-container-name">${info.name}</div>` : ''}
+            <div class="health-card-details">${info.rawStatus || 'No status available'}</div>
+          </div>
+          ${healButtonHtml}
         </div>
       </div>
     `;
   }).join('');
+
+  grid.querySelectorAll('.heal-service-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const service = btn.getAttribute('data-service');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner" style="width:10px;height:10px;margin-right:4px;"></span> Healing...';
+      try {
+        const response = await fetch('/api/local-health/fix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: currentProject, type: 'heal-service', service })
+        });
+        const resData = await response.json();
+        if (resData.success) {
+          showToast(`Healing task started for service "${service}".`, 'success');
+        } else {
+          showToast(`Failed to heal "${service}": ${resData.error}`, 'error');
+        }
+      } catch (err) {
+        showToast(`Error triggering heal action: ${err.message}`, 'error');
+      } finally {
+        loadLocalHealth(); // refresh UI
+      }
+    });
+  });
 }
 
 // --- DB Connectivity Panel ---

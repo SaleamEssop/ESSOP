@@ -28,7 +28,13 @@
       </div>
       
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-tab="explorer">
+        <button class="nav-item active" data-tab="dashboard">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M13,3V9H21V3H13M13,21H21V11H13V21M3,21H11V15H3V21M3,13H11V3H3V13Z"/>
+          </svg>
+          Dashboard
+        </button>
+        <button class="nav-item" data-tab="explorer">
           <svg viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor" d="M4,4H20V20H4V4M6,6V18H18V6H6M9,9H15V15H9V9Z"/>
           </svg>
@@ -91,7 +97,7 @@
           <div class="breadcrumbs">
             <span class="breadcrumb-parent">Snapshot Console</span>
             <span class="breadcrumb-separator">/</span>
-            <span class="breadcrumb-active" id="current-tab-title">Restore from Snapshot</span>
+            <span class="breadcrumb-active" id="current-tab-title">Dashboard</span>
           </div>
         </div>
         
@@ -114,6 +120,120 @@
           </button>
         </div>
       </header>
+
+      <!-- Content Area -->
+      <main class="app-main-content">
+        
+        <!-- ================= DASHBOARD TAB ================= -->
+        <section id="tab-dashboard" class="tab-panel active">
+          
+          <!-- Overview metrics row (Active Directory, Recovery Snapshots, Latest Snapshot) -->
+          <div class="overview-grid-metrics" style="margin-bottom: 24px;">
+            <div class="metric-card card">
+              <div class="metric-icon metric-blue">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path fill="currentColor" d="M19 13H5V11H19V13M19 9H5V7H19V9M19 17H5V15H19V17M20 3H4C2.89 3 2 3.89 2 5V19C2 20.11 2.89 21 4 21H20C21.11 21 22 20.11 22 19V5C22 3.89 21.11 3 20 3Z"/>
+                </svg>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">Active Directory</span>
+                <h3 class="metric-value text-ellipsis" id="overview-dir">-</h3>
+              </div>
+            </div>
+
+            <div class="metric-card card">
+              <div class="metric-icon metric-teal">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Z"/>
+                </svg>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">Recovery Snapshots</span>
+                <h3 class="metric-value" id="overview-count">0</h3>
+              </div>
+            </div>
+
+            <div class="metric-card card">
+              <div class="metric-icon metric-purple">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <path fill="currentColor" d="M12,3c-4.97,0-9,4.03-9,9H1l3.89,3.89.07.14L9,12H6c0-3.31,2.69-6,6-6s6,2.69,6,6-2.69,6-6,6c-1.66,0-3.17-.67-4.28-1.76L6.29,17.66C7.75,19.11,9.77,20,12,20c4.97,0,9-4.03,9-9S16.97,3,12,3Z"/>
+                </svg>
+              </div>
+              <div class="metric-details">
+                <span class="metric-label">Latest Snapshot</span>
+                <h3 class="metric-value" id="overview-latest">-</h3>
+              </div>
+            </div>
+          </div>
+
+          <!-- Local Container Status Monitor & Restart button -->
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <div>
+                <h3 class="card-title">Local Stack Container Monitor</h3>
+                <p class="card-subtitle">Manage container health status and restart local stack services.</p>
+              </div>
+              <button id="local-restart-stack-btn" class="btn btn-danger flex-center" title="Force down and up of Podman Compose stack" style="margin-top: 0;">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <path fill="currentColor" d="M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12H4A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z"/>
+                </svg>
+                Restart Compose Stack
+              </button>
+            </div>
+            
+            <div class="health-containers-grid" id="local-containers-grid" style="margin-bottom: 16px;">
+              <div class="card flex-center" style="grid-column: 1 / -1; padding: 30px;">
+                <div class="spinner" style="width: 24px; height: 24px; margin-right: 12px;"></div>
+                Loading local container status...
+              </div>
+            </div>
+            
+            <div class="db-connectivity-panel" id="local-db-connectivity" style="margin-bottom: 0;">
+              <!-- Dynamically populated database connection info -->
+            </div>
+          </div>
+
+          <!-- HTTP Connections Row -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <div class="db-connectivity-panel" id="local-http-homescreen" style="margin-bottom: 0;">
+              <div class="db-connectivity-info">
+                <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
+                <div class="db-connectivity-text">
+                  <h4>MyPools Homescreen</h4>
+                  <p>Verifying connection status...</p>
+                </div>
+              </div>
+            </div>
+            <div class="db-connectivity-panel" id="local-http-wordpress" style="margin-bottom: 0;">
+              <div class="db-connectivity-info">
+                <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
+                <div class="db-connectivity-text">
+                  <h4>WordPress Engine</h4>
+                  <p>Verifying connection status...</p>
+                </div>
+              </div>
+            </div>
+            <div class="db-connectivity-panel" id="local-http-media-thumbnails" style="margin-bottom: 0;">
+              <div class="db-connectivity-info">
+                <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
+                <div class="db-connectivity-text">
+                  <h4>Media &amp; Thumbnails</h4>
+                  <p>Verifying media URL status...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Diagnostics and Fix console -->
+          <div class="card" style="margin-bottom: 24px;">
+            <h3 class="card-title">Diagnostics &amp; Fix Console</h3>
+            <p class="card-subtitle" style="margin-bottom: 16px;">Resolves common configuration errors dynamically.</p>
+            <div class="diag-warnings-container" id="local-diagnostics-container">
+              <!-- Dynamically populated diagnostics warning list -->
+            </div>
+          </div>
+
+        </section>
 
       <!-- Content Area -->
       <main class="app-main-content">
@@ -145,7 +265,7 @@
         </section>
 
         <!-- ================= EXPLORER TAB (CREATE SNAPSHOT) ================= -->
-        <section id="tab-explorer" class="tab-panel active">
+        <section id="tab-explorer" class="tab-panel">
           <div class="card" style="max-width: 640px; margin: 0 auto;">
             <div class="card-header">
               <div>
@@ -504,112 +624,6 @@
 
           <!-- SUB-PANEL: LOCAL HEALTH & DIAGNOSTICS -->
           <div id="sub-panel-local-health" class="parity-sub-panel">
-             <!-- Overview metrics row (Active Directory, Recovery Snapshots, Latest Snapshot) -->
-             <div class="overview-grid-metrics" style="margin-bottom: 24px;">
-               <div class="metric-card card">
-                 <div class="metric-icon metric-blue">
-                   <svg viewBox="0 0 24 24" width="24" height="24">
-                     <path fill="currentColor" d="M19 13H5V11H19V13M19 9H5V7H19V9M19 17H5V15H19V17M20 3H4C2.89 3 2 3.89 2 5V19C2 20.11 2.89 21 4 21H20C21.11 21 22 20.11 22 19V5C22 3.89 21.11 3 20 3Z"/>
-                   </svg>
-                 </div>
-                 <div class="metric-details">
-                   <span class="metric-label">Active Directory</span>
-                   <h3 class="metric-value text-ellipsis" id="overview-dir">-</h3>
-                 </div>
-               </div>
-
-               <div class="metric-card card">
-                 <div class="metric-icon metric-teal">
-                   <svg viewBox="0 0 24 24" width="24" height="24">
-                     <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Z"/>
-                   </svg>
-                 </div>
-                 <div class="metric-details">
-                   <span class="metric-label">Recovery Snapshots</span>
-                   <h3 class="metric-value" id="overview-count">0</h3>
-                 </div>
-               </div>
-
-               <div class="metric-card card">
-                 <div class="metric-icon metric-purple">
-                   <svg viewBox="0 0 24 24" width="24" height="24">
-                     <path fill="currentColor" d="M12,3c-4.97,0-9,4.03-9,9H1l3.89,3.89.07.14L9,12H6c0-3.31,2.69-6,6-6s6,2.69,6,6-2.69,6-6,6c-1.66,0-3.17-.67-4.28-1.76L6.29,17.66C7.75,19.11,9.77,20,12,20c4.97,0,9-4.03,9-9S16.97,3,12,3Z"/>
-                   </svg>
-                 </div>
-                 <div class="metric-details">
-                   <span class="metric-label">Latest Snapshot</span>
-                   <h3 class="metric-value" id="overview-latest">-</h3>
-                 </div>
-               </div>
-             </div>
-
-             <!-- Local Container Status Monitor & Restart button -->
-             <div class="card" style="margin-bottom: 24px;">
-               <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                 <div>
-                   <h3 class="card-title">Local Stack Container Monitor</h3>
-                   <p class="card-subtitle">Manage container health status and restart local stack services.</p>
-                 </div>
-                 <button id="local-restart-stack-btn" class="btn btn-danger flex-center" title="Force down and up of Podman Compose stack" style="margin-top: 0;">
-                   <svg viewBox="0 0 24 24" width="16" height="16">
-                     <path fill="currentColor" d="M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12H4A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z"/>
-                   </svg>
-                   Restart Compose Stack
-                 </button>
-               </div>
-               
-               <div class="health-containers-grid" id="local-containers-grid" style="margin-bottom: 16px;">
-                 <div class="card flex-center" style="grid-column: 1 / -1; padding: 30px;">
-                   <div class="spinner" style="width: 24px; height: 24px; margin-right: 12px;"></div>
-                   Loading local container status...
-                 </div>
-               </div>
-               
-               <div class="db-connectivity-panel" id="local-db-connectivity" style="margin-bottom: 0;">
-                 <!-- Dynamically populated database connection info -->
-               </div>
-             </div>
-
-             <!-- HTTP Connections Row -->
-             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px;">
-               <div class="db-connectivity-panel" id="local-http-homescreen" style="margin-bottom: 0;">
-                 <div class="db-connectivity-info">
-                   <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
-                   <div class="db-connectivity-text">
-                     <h4>MyPools Homescreen</h4>
-                     <p>Verifying connection status...</p>
-                   </div>
-                 </div>
-               </div>
-               <div class="db-connectivity-panel" id="local-http-wordpress" style="margin-bottom: 0;">
-                 <div class="db-connectivity-info">
-                   <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
-                   <div class="db-connectivity-text">
-                     <h4>WordPress Engine</h4>
-                     <p>Verifying connection status...</p>
-                   </div>
-                 </div>
-               </div>
-               <div class="db-connectivity-panel" id="local-http-media-thumbnails" style="margin-bottom: 0;">
-                 <div class="db-connectivity-info">
-                   <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
-                   <div class="db-connectivity-text">
-                     <h4>Media &amp; Thumbnails</h4>
-                     <p>Verifying media URL status...</p>
-                   </div>
-                 </div>
-               </div>
-             </div>
-
-             <!-- Diagnostics and Fix console -->
-             <div class="card" style="margin-bottom: 24px;">
-               <h3 class="card-title">Diagnostics &amp; Fix Console</h3>
-               <p class="card-subtitle" style="margin-bottom: 16px;">Resolves common configuration errors dynamically.</p>
-               <div class="diag-warnings-container" id="local-diagnostics-container">
-                 <!-- Dynamically populated diagnostics warning list -->
-               </div>
-             </div>
-
              <!-- Local Port Monitor & Resource Monitor Row -->
              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
                <!-- Local Port Conflict detector -->
