@@ -55,33 +55,22 @@ const stepGitScp    = document.getElementById('step-git-scp');
 const stepGitCicd   = document.getElementById('step-git-cicd');
 const stepGitVerify = document.getElementById('step-git-verify');
 
-// Overview Tab Metrics
+// Overview Tab Metrics (Moved to Health & Parity)
 const overviewDir = document.getElementById('overview-dir');
 const overviewCount = document.getElementById('overview-count');
 const overviewLatest = document.getElementById('overview-latest');
 const overviewComposeName = document.getElementById('overview-compose-name');
-
-// Overview Tab Form
-const overviewRapidForm = document.getElementById('overview-rapid-form');
-const rapidDescInput = document.getElementById('rapid-desc');
-const rapidLiveCheck = document.getElementById('rapid-live');
-const rapidLevelSelect = document.getElementById('rapid-level');
 
 // Snapshots Tab
 const snapshotsGridBody = document.getElementById('snapshots-grid-body');
 const refreshSnapshotsBtn = document.getElementById('refresh-snapshots-btn');
 
 // Explorer Tab
-const explorerItemsContainer = document.getElementById('explorer-items-container');
-const explorerSelectAll = document.getElementById('explorer-select-all');
-const explorerDeselectAll = document.getElementById('explorer-deselect-all');
-const excludesBadgesContainer = document.getElementById('excludes-badges-container');
-const emptyExcludesLabel = document.getElementById('empty-excludes-label');
-
 const explorerSnapshotForm = document.getElementById('explorer-snapshot-form');
 const explorerDescInput = document.getElementById('explorer-desc');
 const explorerLiveCheck = document.getElementById('explorer-live');
 const explorerLevelSelect = document.getElementById('explorer-level');
+const explorerExcludePaths = document.getElementById('explorer-exclude-paths');
 const explorerSubmitBtn = document.getElementById('explorer-submit-btn');
 
 // Terminal Tab
@@ -358,16 +347,12 @@ navItems.forEach(item => {
     currentTabTitle.textContent = item.textContent.trim();
 
     // Manage polling and fetch tab-specific data
-    if (targetTab === 'overview') {
+    if (targetTab === 'parity') {
       startStatsPolling();
       checkLocalPorts();
-    } else {
-      stopStatsPolling();
-    }
-
-    if (targetTab === 'local-health') {
       startLocalHealthPolling();
     } else {
+      stopStatsPolling();
       stopLocalHealthPolling();
     }
 
@@ -376,6 +361,33 @@ navItems.forEach(item => {
     } else if (targetTab === 'git') {
       loadGitStatus();
     }
+  });
+});
+
+// --- Health & Parity Sub-Tab Navigation ---
+document.querySelectorAll('.sub-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const targetSubTab = btn.getAttribute('data-sub-tab');
+    
+    document.querySelectorAll('.sub-tab-btn').forEach(b => {
+      b.classList.remove('active');
+      b.style.background = 'none';
+      b.style.borderColor = 'transparent';
+      b.style.color = 'var(--text-desc)';
+    });
+    
+    btn.classList.add('active');
+    btn.style.background = 'rgba(255, 255, 255, 0.05)';
+    btn.style.borderColor = 'var(--border-subtle)';
+    btn.style.color = '#fff';
+    
+    document.querySelectorAll('.parity-sub-panel').forEach(panel => {
+      if (panel.id === `sub-panel-${targetSubTab}`) {
+        panel.style.display = 'block';
+      } else {
+        panel.style.display = 'none';
+      }
+    });
   });
 });
 
@@ -401,14 +413,14 @@ async function loadProjects() {
       }
       projectSelect.value = currentProject;
       await loadProjectSnapshots(currentProject);
-      await loadProjectFiles(currentProject);
       await loadSettings();
       await loadGitStatus();
       
       checkLocalPorts();
       const activeTabItem = document.querySelector('.nav-item.active');
-      if (activeTabItem && activeTabItem.getAttribute('data-tab') === 'overview') {
+      if (activeTabItem && activeTabItem.getAttribute('data-tab') === 'parity') {
         startStatsPolling();
+        startLocalHealthPolling();
       }
     } else {
       currentProject = '';
@@ -732,162 +744,7 @@ function updateStepperFromLog(text) {
   }
 }
 
-// --- Fetch API: Load Project Directory Files for Exclusion Explorer ---
-async function loadProjectFiles(project) {
-  explorerItemsContainer.innerHTML = `
-    <div class="loading-state">
-      <div class="spinner"></div>
-      Reading project structure...
-    </div>
-  `;
 
-  excludedPaths.clear();
-  renderExclusionsSummary();
-
-  try {
-    const response = await fetch(`/api/project/files?project=${project}`);
-    if (!response.ok) throw new Error('API Error');
-    const data = await response.json();
-    
-    projectFiles = data.items || [];
-    renderProjectFiles();
-  } catch (err) {
-    explorerItemsContainer.innerHTML = `
-      <div class="loading-state text-danger">
-        <p>Failed to retrieve directory structure.</p>
-        <p style="font-size: 12px; margin-top: 4px;">Make sure the project source folder exists on disk.</p>
-      </div>
-    `;
-    showToast('Failed to load project directory structure.', 'error');
-  }
-}
-
-// --- Render Explorer Items checklist ---
-function renderProjectFiles() {
-  explorerItemsContainer.innerHTML = '';
-  
-  if (projectFiles.length === 0) {
-    explorerItemsContainer.innerHTML = `
-      <div class="empty-state">
-        <p>No root-level directories or files found to configure.</p>
-      </div>
-    `;
-    return;
-  }
-
-  projectFiles.forEach(item => {
-    const isExcluded = excludedPaths.has(item.name);
-    
-    const itemEl = document.createElement('div');
-    itemEl.className = `explorer-item ${isExcluded ? 'excluded' : ''}`;
-    itemEl.setAttribute('data-item-name', item.name);
-    
-    // Choose appropriate SVG icons
-    const iconSvg = item.isDirectory
-      ? `<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/></svg>`
-      : `<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z"/></svg>`;
-      
-    const typeLabel = item.isDirectory
-      ? `<span class="explorer-badge-tag badge-folder">Folder</span>`
-      : `<span class="explorer-badge-tag badge-file">File</span>`;
-
-    itemEl.innerHTML = `
-      <div class="explorer-item-left">
-        <input type="checkbox" class="explorer-item-checkbox" ${isExcluded ? '' : 'checked'}>
-        <span class="explorer-item-icon">${iconSvg}</span>
-        <span class="explorer-item-name">${item.name}</span>
-      </div>
-      <div>
-        ${typeLabel}
-      </div>
-    `;
-
-    // Row Click toggle event
-    itemEl.addEventListener('click', (e) => {
-      // Check if target is the checkbox. If it is, the checkbox value is already toggled.
-      const isCheckboxClick = e.target.classList.contains('explorer-item-checkbox');
-      const checkbox = itemEl.querySelector('.explorer-item-checkbox');
-      
-      if (!isCheckboxClick) {
-        checkbox.checked = !checkbox.checked;
-      }
-      
-      toggleItemExclude(item.name, checkbox.checked);
-    });
-
-    explorerItemsContainer.appendChild(itemEl);
-  });
-}
-
-// --- Toggle Exclude State for Explorer Checklist ---
-function toggleItemExclude(name, isIncluded) {
-  const itemEl = document.querySelector(`[data-item-name="${name}"]`);
-  
-  if (!isIncluded) {
-    excludedPaths.add(name);
-    if (itemEl) itemEl.classList.add('excluded');
-  } else {
-    excludedPaths.delete(name);
-    if (itemEl) itemEl.classList.remove('excluded');
-  }
-  
-  renderExclusionsSummary();
-}
-
-// --- Render Exclusion Badges Summary list ---
-function renderExclusionsSummary() {
-  excludesBadgesContainer.innerHTML = '';
-  
-  if (excludedPaths.size === 0) {
-    emptyExcludesLabel.style.display = 'block';
-    return;
-  }
-
-  emptyExcludesLabel.style.display = 'none';
-  excludedPaths.forEach(path => {
-    const badge = document.createElement('span');
-    badge.className = 'exclusion-badge';
-    badge.innerHTML = `
-      ${path}
-      <span class="badge-remove" style="cursor: pointer; font-weight: bold; margin-left: 4px;">&times;</span>
-    `;
-
-    // Clicking cross button restores check state and deletes exclusion
-    badge.querySelector('.badge-remove').addEventListener('click', (e) => {
-      e.stopPropagation();
-      const checkbox = document.querySelector(`[data-item-name="${path}"] .explorer-item-checkbox`);
-      if (checkbox) checkbox.checked = true;
-      toggleItemExclude(path, true);
-    });
-
-    excludesBadgesContainer.appendChild(badge);
-  });
-}
-
-// --- Select All & Deselect All Operations ---
-explorerSelectAll.addEventListener('click', () => {
-  excludedPaths.clear();
-  const checkboxes = document.querySelectorAll('.explorer-item-checkbox');
-  checkboxes.forEach(cb => cb.checked = true);
-  
-  const items = document.querySelectorAll('.explorer-item');
-  items.forEach(el => el.classList.remove('excluded'));
-  
-  renderExclusionsSummary();
-  showToast('Included all project directories and files.', 'info');
-});
-
-explorerDeselectAll.addEventListener('click', () => {
-  projectFiles.forEach(item => excludedPaths.add(item.name));
-  const checkboxes = document.querySelectorAll('.explorer-item-checkbox');
-  checkboxes.forEach(cb => cb.checked = false);
-  
-  const items = document.querySelectorAll('.explorer-item');
-  items.forEach(el => el.classList.add('excluded'));
-  
-  renderExclusionsSummary();
-  showToast('Excluded all project files from snapshots.', 'warning');
-});
 
 // --- Real-time Log Stream Connection ---
 function initLogsStream() {
@@ -924,17 +781,11 @@ function updateTaskStatus(task) {
   
   const sidebarDot = document.getElementById('sidebar-status-dot');
   const sidebarText = document.getElementById('sidebar-status-text');
-  
-  const rapidSubmitBtn = document.querySelector('#overview-rapid-form button[type="submit"]');
 
   if (task.status === 'running') {
     lastTaskType = task.taskType;
     
     // Disable inputs
-    if (rapidSubmitBtn) {
-      rapidSubmitBtn.disabled = true;
-      rapidSubmitBtn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; margin: 0 8px 0 0; display: inline-block;"></div> Executing...';
-    }
     explorerSubmitBtn.disabled = true;
     explorerSubmitBtn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; margin: 0 8px 0 0; display: inline-block;"></div> Executing...';
     refreshSnapshotsBtn.disabled = true;
@@ -963,12 +814,8 @@ function updateTaskStatus(task) {
     miniConsole.classList.add('expanded');
   } else {
     // Enable inputs
-    if (rapidSubmitBtn) {
-      rapidSubmitBtn.disabled = false;
-      rapidSubmitBtn.textContent = 'Take Snapshot';
-    }
     explorerSubmitBtn.disabled = false;
-    explorerSubmitBtn.textContent = 'Take Custom Snapshot';
+    explorerSubmitBtn.textContent = 'Take Snapshot';
     refreshSnapshotsBtn.disabled = false;
     
     // Enable Settings & Git inputs
@@ -1033,33 +880,7 @@ function handleTaskCompleted(code) {
   loadProjectSnapshots(currentProject);
 }
 
-// --- Action: Take Rapid Snapshot ---
-overviewRapidForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-
-  if (activeTask.status === 'running') {
-    showToast('A backup or recovery action is currently executing.', 'warning');
-    return;
-  }
-
-  const desc = rapidDescInput.value.trim();
-  const live = rapidLiveCheck.checked;
-  const backupLevel = rapidLevelSelect.value;
-  const noDb = (backupLevel === 'Low');
-
-  await triggerSnapshotCreation({
-    project: currentProject,
-    description: desc,
-    live,
-    noDb,
-    backupLevel,
-    excludePaths: []
-  });
-
-  rapidDescInput.value = '';
-});
-
-// --- Action: Take Custom Snapshot (Folder Explorer Exclusions) ---
+// --- Action: Take Snapshot ---
 explorerSnapshotForm.addEventListener('submit', async (e) => {
   e.preventDefault();
 
@@ -1073,8 +894,11 @@ explorerSnapshotForm.addEventListener('submit', async (e) => {
   const backupLevel = explorerLevelSelect.value;
   const noDb = (backupLevel === 'Low');
 
-  // Convert Set to array of exclusion paths
-  const excludePaths = Array.from(excludedPaths);
+  // Convert comma-separated exclusions input to array of relative paths
+  const excludesStr = explorerExcludePaths ? explorerExcludePaths.value.trim() : '';
+  const excludePaths = excludesStr
+    ? excludesStr.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
 
   await triggerSnapshotCreation({
     project: currentProject,
@@ -1086,6 +910,7 @@ explorerSnapshotForm.addEventListener('submit', async (e) => {
   });
 
   explorerDescInput.value = '';
+  if (explorerExcludePaths) explorerExcludePaths.value = '';
 });
 
 // --- Action: Save Settings & SSH Credentials ---
@@ -1367,17 +1192,16 @@ confirmDeleteBtn.addEventListener('click', async () => {
 
 // --- UI Interaction Event Binding ---
 
-// Project selector change listener
 projectSelect.addEventListener('change', async (e) => {
   currentProject = e.target.value;
   await loadProjectSnapshots(currentProject);
-  await loadProjectFiles(currentProject);
   await loadSettings();
   await loadGitStatus();
   checkLocalPorts();
   const activeTabItem = document.querySelector('.nav-item.active');
-  if (activeTabItem && activeTabItem.getAttribute('data-tab') === 'overview') {
+  if (activeTabItem && activeTabItem.getAttribute('data-tab') === 'parity') {
     startStatsPolling();
+    startLocalHealthPolling();
   }
 });
 

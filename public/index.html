@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Snapshot Recovery Console</title>
+  <title>ESSOP — Snapshot Recovery Console</title>
   <link rel="stylesheet" href="style.css">
   <!-- Google Fonts: Outfit (Heading) & Inter (Body) & JetBrains Mono (Console) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Favicon Browser Identity -->
+  <link rel="icon" type="image/x-icon" href="favicon.ico?v=1">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=1">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=1">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=1">
 </head>
 <body>
 
@@ -22,29 +28,17 @@
       </div>
       
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-tab="snapshots">
+        <button class="nav-item active" data-tab="explorer">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M4,4H20V20H4V4M6,6V18H18V6H6M9,9H15V15H9V9Z"/>
+          </svg>
+          Create Snapshot
+        </button>
+        <button class="nav-item" data-tab="snapshots">
           <svg viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Zm-3,6a3,3,0,1,1,3,3A3,3,0,0,1,9,12Z"/>
           </svg>
           Restore from Snapshot
-        </button>
-        <button class="nav-item" data-tab="overview">
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor" d="M10,20H14V14H10V20M4,20H8V10H4V20M16,20H20V6H16V20M3,22H21V24H3V22M10,2H14V12H10V2M4,5H8V8H4V5M16,2H20V4H16V2Z"/>
-          </svg>
-          Overview
-        </button>
-        <button class="nav-item" data-tab="explorer">
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor" d="M20,18H4V8H20M20,6H12L10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6Z"/>
-          </svg>
-          Folder Explorer
-        </button>
-        <button class="nav-item" data-tab="settings">
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor" d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.35 19.43,11.03L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.47,5.34 14.86,5.08L14.47,2.42C14.43,2.18 14.22,2 13.97,2H9.97C9.72,2 9.51,2.18 9.47,2.42L9.08,5.08C8.47,5.34 7.9,5.66 7.38,6.05L4.89,5.05C4.67,4.96 4.4,5.05 4.28,5.27L2.28,8.73C2.16,8.95 2.21,9.22 2.4,9.37L4.51,11.03C4.47,11.35 4.45,11.67 4.45,12C4.45,12.33 4.47,12.65 4.51,12.97L2.4,14.63C2.21,14.78 2.16,15.05 2.28,15.27L4.28,18.73C4.4,18.95 4.67,19.04 4.89,18.95L7.38,17.95C7.9,18.34 8.47,18.66 9.08,18.92L9.47,21.58C9.51,21.82 9.72,22 9.97,22H13.97C14.22,22 14.43,21.82 14.47,21.58L14.86,18.92C15.47,18.66 16.04,18.34 16.56,17.95L19.05,18.95C19.27,19.04 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/>
-          </svg>
-          Credentials & Settings
         </button>
         <button class="nav-item" data-tab="git">
           <svg viewBox="0 0 24 24" width="20" height="20">
@@ -54,21 +48,21 @@
         </button>
         <button class="nav-item" data-tab="parity">
           <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor" d="M12,2A10,10,0,1,0 22,12A10,10,0,0,0 12,2M12,4A8,8 0 1,1 4,12A8,8 0 0,1 12,4M12,18A6,6 0 1,0 6,12A6,6 0 0,0 12,18M12,8A4,4 0 1,1 8,12A4,4 0 0,1 12,8Z"/>
-          </svg>
-          Health & Parity
-        </button>
-        <button class="nav-item" data-tab="local-health">
-          <svg viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor" d="M12 2C6.47 2 2 6.47 2 12S6.47 22 12 22 22 17.53 22 12 17.53 2 12 2M17 13H14.5L12.5 7L10.5 17L9.5 13H7V11H8.5L9.5 15L11.5 5L13.5 15L14.5 11H17V13Z"/>
           </svg>
-          Local Health & Paths
+          Health &amp; Parity
         </button>
         <button class="nav-item" data-tab="terminal">
           <svg viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor" d="M20,19V7H4V19H20M20,5A2,2 0 0,1 22,7V19A2,2 0 0,1 20,21H4A2,2 0 0,1 2,19V7A2,2 0 0,1 4,5H20M13,17V15H18V17H13M9.58,13L5.58,17L4.17,15.58L7,12.75L4.17,9.92L5.58,8.5L9.58,12.5A0.35,0.35 0 0,1 9.58,13Z"/>
           </svg>
           Live Console
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.35 19.43,11.03L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.47,5.34 14.86,5.08L14.47,2.42C14.43,2.18 14.22,2 13.97,2H9.97C9.72,2 9.51,2.18 9.47,2.42L9.08,5.08C8.47,5.34 7.9,5.66 7.38,6.05L4.89,5.05C4.67,4.96 4.4,5.05 4.28,5.27L2.28,8.73C2.16,8.95 2.21,9.22 2.4,9.37L4.51,11.03C4.47,11.35 4.45,11.67 4.45,12C4.45,12.33 4.47,12.65 4.51,12.97L2.4,14.63C2.21,14.78 2.16,15.05 2.28,15.27L4.28,18.73C4.4,18.95 4.67,19.04 4.89,18.95L7.38,17.95C7.9,18.34 8.47,18.66 9.08,18.92L9.47,21.58C9.51,21.82 9.72,22 9.97,22H13.97C14.22,22 14.43,21.82 14.47,21.58L14.86,18.92C15.47,18.66 16.04,18.34 16.56,17.95L19.05,18.95C19.27,19.04 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/>
+          </svg>
+          Credentials &amp; Settings
         </button>
       </nav>
 
@@ -124,165 +118,12 @@
       <!-- Content Area -->
       <main class="app-main-content">
         
-        <!-- ================= OVERVIEW TAB ================= -->
-        <section id="tab-overview" class="tab-panel">
-          
-          <!-- State Overview Cards -->
-          <div class="overview-grid-metrics">
-            <div class="metric-card card">
-              <div class="metric-icon metric-blue">
-                <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path fill="currentColor" d="M19 13H5V11H19V13M19 9H5V7H19V9M19 17H5V15H19V17M20 3H4C2.89 3 2 3.89 2 5V19C2 20.11 2.89 21 4 21H20C21.11 21 22 20.11 22 19V5C22 3.89 21.11 3 20 3Z"/>
-                </svg>
-              </div>
-              <div class="metric-details">
-                <span class="metric-label">Active Directory</span>
-                <h3 class="metric-value text-ellipsis" id="overview-dir">-</h3>
-              </div>
-            </div>
-
-            <div class="metric-card card">
-              <div class="metric-icon metric-teal">
-                <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Z"/>
-                </svg>
-              </div>
-              <div class="metric-details">
-                <span class="metric-label">Recovery Snapshots</span>
-                <h3 class="metric-value" id="overview-count">0</h3>
-              </div>
-            </div>
-
-            <div class="metric-card card">
-              <div class="metric-icon metric-purple">
-                <svg viewBox="0 0 24 24" width="24" height="24">
-                  <path fill="currentColor" d="M12,3c-4.97,0-9,4.03-9,9H1l3.89,3.89.07.14L9,12H6c0-3.31,2.69-6,6-6s6,2.69,6,6-2.69,6-6,6c-1.66,0-3.17-.67-4.28-1.76L6.29,17.66C7.75,19.11,9.77,20,12,20c4.97,0,9-4.03,9-9S16.97,3,12,3Z"/>
-                </svg>
-              </div>
-              <div class="metric-details">
-                <span class="metric-label">Latest Snapshot</span>
-                <h3 class="metric-value" id="overview-latest">-</h3>
-              </div>
-            </div>
-          </div>
-
-          <div class="overview-layout-split">
-            <!-- Project Configurations -->
-            <div class="card detail-card">
-              <h3 class="card-title">Project Details</h3>
-              <p class="card-subtitle">Server environment configurations map</p>
-              
-              <div class="info-table-container">
-                <table class="info-table">
-                  <tbody>
-                    <tr>
-                      <td class="info-key">Compose Profile</td>
-                      <td class="info-val text-white" id="overview-compose-name">-</td>
-                    </tr>
-                    <tr>
-                      <td class="info-key">Container Engine</td>
-                      <td class="info-val"><span class="badge badge-success">Podman Desktop</span></td>
-                    </tr>
-                    <tr>
-                      <td class="info-key">Snapshot Root Path</td>
-                      <td class="info-val"><code>C:\snapshots\</code></td>
-                    </tr>
-                    <tr>
-                      <td class="info-key">Disk Location</td>
-                      <td class="info-val">Local System (Independent)</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Create Snapshot Overview Form -->
-            <div class="card detail-card flex-between">
-              <div>
-                <h3 class="card-title">Take Rapid Snapshot</h3>
-                <p class="card-subtitle">Creates a consistent backup using active default config</p>
-              </div>
-
-              <form id="overview-rapid-form" class="action-form">
-                <div class="form-group">
-                  <input type="text" id="rapid-desc" placeholder="Snapshot description (e.g. baseline backup)" required>
-                </div>
-                <div class="form-group" style="margin-bottom: 12px;">
-                  <label for="rapid-level" style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-desc); letter-spacing: 0.05em;">Backup Level</label>
-                  <select id="rapid-level" class="form-control select-dropdown" style="background-color: var(--bg-input); color: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 10px; font-family: var(--font-family-sans); font-size: 13px; outline: none; transition: all 0.2s; cursor: pointer; width: 100%;">
-                    <option value="High" selected>High (Complete Recovery State - files, uploads, secrets & DB)</option>
-                    <option value="Medium">Medium (Code + Database dump, excludes uploads & secrets)</option>
-                    <option value="Low">Low (Code files only, excludes DB, uploads & secrets)</option>
-                  </select>
-                </div>
-                <div class="form-row-checkboxes">
-                  <label class="switch-container">
-                    <input type="checkbox" id="rapid-live">
-                    <span class="switch-slider"></span>
-                    <span class="switch-label-text">
-                      <strong>Live (no shutdown)</strong>
-                    </span>
-                  </label>
-                </div>
-                <button type="submit" class="btn btn-primary btn-full flex-center font-bold">
-                  Take Snapshot
-                </button>
-              </form>
-            </div>
-          </div>
-
-          <!-- Local Port conflict and Resource monitoring row -->
-          <div class="overview-layout-split" style="margin-top: 24px; grid-template-columns: 1fr 1fr;">
-            <!-- Local Port Conflict detector -->
-            <div class="card detail-card" id="overview-port-card">
-              <h3 class="card-title">Local Port Monitor</h3>
-              <p class="card-subtitle">Verification of compose ports mapping availability</p>
-              
-              <div class="port-status-container" style="margin-top: 16px; flex: 1; display: flex; flex-direction: column; gap: 10px;">
-                <div class="loading-state" id="ports-loading" style="padding: 20px;">
-                  <div class="spinner" style="width: 20px; height: 20px; margin-bottom: 8px;"></div>
-                  Checking local port availability...
-                </div>
-                <div id="ports-list" style="display: none; flex-direction: column; gap: 8px;">
-                  <!-- Dynamically populated ports status -->
-                </div>
-                <div id="ports-ok-alert" class="alert-box alert-success" style="display: none; margin: 0; font-size: 13px;">
-                  <strong>Port Status:</strong> All compose ports are free and available.
-                </div>
-                <div id="ports-conflict-alert" class="alert-box alert-danger" style="display: none; margin: 0; font-size: 13px;">
-                  <strong>PORT CONFLICT WARNING:</strong> One or more compose host ports are already bound by other local processes.
-                </div>
-              </div>
-            </div>
-
-            <!-- Dynamic Container Stats (Resource Monitor) -->
-            <div class="card detail-card" id="overview-resources-card">
-              <h3 class="card-title">Resource Monitor</h3>
-              <p class="card-subtitle">Real-time local container metrics (CPU / Memory / Network)</p>
-              
-              <div class="resources-container" style="margin-top: 16px; flex: 1; display: flex; flex-direction: column; gap: 12px;">
-                <div class="loading-state" id="resources-loading" style="padding: 20px;">
-                  <div class="spinner" style="width: 20px; height: 20px; margin-bottom: 8px;"></div>
-                  Polling container stats...
-                </div>
-                <div id="resources-list" style="display: none; flex-direction: column; gap: 10px;">
-                  <!-- Dynamically populated metrics -->
-                </div>
-                <div id="resources-empty" class="alert-box alert-info" style="display: none; margin: 0; font-size: 13px;">
-                  <strong>Metrics Status:</strong> No active containers running for this project.
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </section>
-
         <!-- ================= SNAPSHOTS TAB ================= -->
-        <section id="tab-snapshots" class="tab-panel active">
+        <section id="tab-snapshots" class="tab-panel">
           <div class="card panel-full-card">
             <div class="card-header">
               <div>
-                <h3 class="card-title">Snapshot Restore & Rollback</h3>
+                <h3 class="card-title">Snapshot Restore &amp; Rollback</h3>
                 <p class="card-subtitle">Select an available snapshot to restore the project environment. Restoring will overwrite existing files.</p>
               </div>
               <button id="refresh-snapshots-btn" class="btn btn-secondary flex-center">
@@ -303,79 +144,57 @@
           </div>
         </section>
 
-        <!-- ================= EXPLORER TAB ================= -->
-        <section id="tab-explorer" class="tab-panel">
-          <div class="explorer-layout">
-            
-            <!-- Checklist Card -->
-            <div class="card folder-checklist-card">
-              <div class="card-header">
-                <div>
-                  <h3 class="card-title">Project File Explorer</h3>
-                  <p class="card-subtitle">Select root-level items to include in the backup. Unchecked items are excluded.</p>
-                </div>
-                <div class="explorer-actions-group">
-                  <button id="explorer-select-all" class="btn btn-text-primary text-xs">Select All</button>
-                  <button id="explorer-deselect-all" class="btn btn-text-primary text-xs">Deselect All</button>
-                </div>
-              </div>
-
-              <!-- List of folder items -->
-              <div class="explorer-items-list" id="explorer-items-container">
-                <div class="loading-state">
-                  <div class="spinner"></div>
-                  Reading project files...
-                </div>
+        <!-- ================= EXPLORER TAB (CREATE SNAPSHOT) ================= -->
+        <section id="tab-explorer" class="tab-panel active">
+          <div class="card" style="max-width: 640px; margin: 0 auto;">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Create Snapshot</h3>
+                <p class="card-subtitle">Take a consistent recovery snapshot of the active environment.</p>
               </div>
             </div>
 
-            <!-- Configuration Summary Side Card -->
-            <div class="card explorer-summary-card">
-              <h3 class="card-title-small">Snapshot Exclusions Summary</h3>
-              <p class="card-subtitle">Dynamic exclude paths fed to zipping script</p>
-
-              <div class="exclusions-list-container">
-                <div class="empty-exclusions" id="empty-excludes-label">
-                  No custom exclusions. Everything will be backed up.
-                </div>
-                <div class="exclusions-badges-grid" id="excludes-badges-container">
-                  <!-- Dynamically populated tags -->
-                </div>
+            <form id="explorer-snapshot-form" class="action-form" style="padding: 0 24px 24px 24px;">
+              <div class="form-group">
+                <label for="explorer-desc">Snapshot Description</label>
+                <input type="text" id="explorer-desc" placeholder="e.g. Baseline before theme update" required>
               </div>
 
-              <div class="action-divider"></div>
+              <div class="form-group" style="margin-top: 12px; margin-bottom: 12px;">
+                <label for="explorer-level" style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-desc); letter-spacing: 0.05em;">Backup Level</label>
+                <select id="explorer-level" class="form-control select-dropdown" style="background-color: var(--bg-input); color: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 10px; font-family: var(--font-family-sans); font-size: 13px; outline: none; transition: all 0.2s; cursor: pointer; width: 100%;">
+                  <option value="High" selected>High (Complete Recovery State - files, uploads, secrets &amp; DB)</option>
+                  <option value="Medium">Medium (Code + Database dump, excludes uploads &amp; secrets)</option>
+                  <option value="Low">Low (Code files only, excludes DB, uploads &amp; secrets)</option>
+                </select>
+              </div>
 
-              <form id="explorer-snapshot-form" class="action-form">
-                <div class="form-group">
-                  <label for="explorer-desc">Custom Snapshot Description</label>
-                  <input type="text" id="explorer-desc" placeholder="e.g. Baseline without media folder" required>
+              <div class="form-checkboxes">
+                <label class="switch-container">
+                  <input type="checkbox" id="explorer-live">
+                  <span class="switch-slider"></span>
+                  <span class="switch-label-text">
+                    <strong>Live backup (no shutdown)</strong>
+                    <span class="switch-desc">Skip container shutdown. Note: Database state might be inconsistent.</span>
+                  </span>
+                </label>
+              </div>
+
+              <details style="margin-top: 16px; margin-bottom: 8px; cursor: pointer;">
+                <summary style="font-size: 13px; color: var(--text-desc); font-weight: 500; user-select: none;">Advanced Path Exclusions</summary>
+                <div class="form-group" style="margin-top: 12px;">
+                  <label for="explorer-exclude-paths">Custom Exclude Paths (comma-separated, relative paths)</label>
+                  <input type="text" id="explorer-exclude-paths" placeholder="e.g. wp-content/uploads, node_modules, temp">
+                  <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">
+                    Paths specified here will be excluded from the zipped backup.
+                  </span>
                 </div>
+              </details>
 
-                <div class="form-group" style="margin-top: 12px; margin-bottom: 12px;">
-                  <label for="explorer-level" style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-desc); letter-spacing: 0.05em;">Backup Level</label>
-                  <select id="explorer-level" class="form-control select-dropdown" style="background-color: var(--bg-input); color: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 10px; font-family: var(--font-family-sans); font-size: 13px; outline: none; transition: all 0.2s; cursor: pointer; width: 100%;">
-                    <option value="High" selected>High (Complete Recovery State - files, uploads, secrets & DB)</option>
-                    <option value="Medium">Medium (Code + Database dump, excludes uploads & secrets)</option>
-                    <option value="Low">Low (Code files only, excludes DB, uploads & secrets)</option>
-                  </select>
-                </div>
-
-                <div class="form-checkboxes">
-                  <label class="switch-container">
-                    <input type="checkbox" id="explorer-live">
-                    <span class="switch-slider"></span>
-                    <span class="switch-label-text">
-                      <strong>Live backup (no shutdown)</strong>
-                    </span>
-                  </label>
-                </div>
-
-                <button type="submit" id="explorer-submit-btn" class="btn btn-primary btn-full flex-center font-bold">
-                  Take Custom Snapshot
-                </button>
-              </form>
-            </div>
-
+              <button type="submit" id="explorer-submit-btn" class="btn btn-primary btn-full flex-center font-bold" style="margin-top: 20px;">
+                Take Snapshot
+              </button>
+            </form>
           </div>
         </section>
 
@@ -672,8 +491,199 @@
 
         <!-- ================= HEALTH & PARITY TAB ================= -->
         <section id="tab-parity" class="tab-panel">
-          <div class="parity-layout">
-            
+          
+          <!-- Segment Controller / Toggle Bar for sub-sections -->
+          <div class="sub-tab-toggle-bar" style="display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px;">
+            <button class="sub-tab-btn active" data-sub-tab="local-health" style="background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-subtle); color: #fff; font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 600; padding: 8px 18px; cursor: pointer; border-radius: var(--radius-md); transition: all 0.2s;">
+              Local Health &amp; Paths
+            </button>
+            <button class="sub-tab-btn" data-sub-tab="vps-parity" style="background: none; border: 1px solid transparent; color: var(--text-desc); font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 600; padding: 8px 18px; cursor: pointer; border-radius: var(--radius-md); transition: all 0.2s;">
+              VPS Production Parity
+            </button>
+          </div>
+
+          <!-- SUB-PANEL: LOCAL HEALTH & DIAGNOSTICS -->
+          <div id="sub-panel-local-health" class="parity-sub-panel">
+             <!-- Overview metrics row (Active Directory, Recovery Snapshots, Latest Snapshot) -->
+             <div class="overview-grid-metrics" style="margin-bottom: 24px;">
+               <div class="metric-card card">
+                 <div class="metric-icon metric-blue">
+                   <svg viewBox="0 0 24 24" width="24" height="24">
+                     <path fill="currentColor" d="M19 13H5V11H19V13M19 9H5V7H19V9M19 17H5V15H19V17M20 3H4C2.89 3 2 3.89 2 5V19C2 20.11 2.89 21 4 21H20C21.11 21 22 20.11 22 19V5C22 3.89 21.11 3 20 3Z"/>
+                   </svg>
+                 </div>
+                 <div class="metric-details">
+                   <span class="metric-label">Active Directory</span>
+                   <h3 class="metric-value text-ellipsis" id="overview-dir">-</h3>
+                 </div>
+               </div>
+
+               <div class="metric-card card">
+                 <div class="metric-icon metric-teal">
+                   <svg viewBox="0 0 24 24" width="24" height="24">
+                     <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Z"/>
+                   </svg>
+                 </div>
+                 <div class="metric-details">
+                   <span class="metric-label">Recovery Snapshots</span>
+                   <h3 class="metric-value" id="overview-count">0</h3>
+                 </div>
+               </div>
+
+               <div class="metric-card card">
+                 <div class="metric-icon metric-purple">
+                   <svg viewBox="0 0 24 24" width="24" height="24">
+                     <path fill="currentColor" d="M12,3c-4.97,0-9,4.03-9,9H1l3.89,3.89.07.14L9,12H6c0-3.31,2.69-6,6-6s6,2.69,6,6-2.69,6-6,6c-1.66,0-3.17-.67-4.28-1.76L6.29,17.66C7.75,19.11,9.77,20,12,20c4.97,0,9-4.03,9-9S16.97,3,12,3Z"/>
+                   </svg>
+                 </div>
+                 <div class="metric-details">
+                   <span class="metric-label">Latest Snapshot</span>
+                   <h3 class="metric-value" id="overview-latest">-</h3>
+                 </div>
+               </div>
+             </div>
+
+             <!-- Local Container Status Monitor & Restart button -->
+             <div class="card" style="margin-bottom: 24px;">
+               <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                 <div>
+                   <h3 class="card-title">Local Stack Container Monitor</h3>
+                   <p class="card-subtitle">Manage container health status and restart local stack services.</p>
+                 </div>
+                 <button id="local-restart-stack-btn" class="btn btn-danger flex-center" title="Force down and up of Podman Compose stack" style="margin-top: 0;">
+                   <svg viewBox="0 0 24 24" width="16" height="16">
+                     <path fill="currentColor" d="M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12H4A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z"/>
+                   </svg>
+                   Restart Compose Stack
+                 </button>
+               </div>
+               
+               <div class="health-containers-grid" id="local-containers-grid" style="margin-bottom: 16px;">
+                 <div class="card flex-center" style="grid-column: 1 / -1; padding: 30px;">
+                   <div class="spinner" style="width: 24px; height: 24px; margin-right: 12px;"></div>
+                   Loading local container status...
+                 </div>
+               </div>
+               
+               <div class="db-connectivity-panel" id="local-db-connectivity" style="margin-bottom: 0;">
+                 <!-- Dynamically populated database connection info -->
+               </div>
+             </div>
+
+             <!-- HTTP Connections Row -->
+             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px;">
+               <div class="db-connectivity-panel" id="local-http-homescreen" style="margin-bottom: 0;">
+                 <div class="db-connectivity-info">
+                   <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
+                   <div class="db-connectivity-text">
+                     <h4>MyPools Homescreen</h4>
+                     <p>Verifying connection status...</p>
+                   </div>
+                 </div>
+               </div>
+               <div class="db-connectivity-panel" id="local-http-wordpress" style="margin-bottom: 0;">
+                 <div class="db-connectivity-info">
+                   <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
+                   <div class="db-connectivity-text">
+                     <h4>WordPress Engine</h4>
+                     <p>Verifying connection status...</p>
+                   </div>
+                 </div>
+               </div>
+               <div class="db-connectivity-panel" id="local-http-media-thumbnails" style="margin-bottom: 0;">
+                 <div class="db-connectivity-info">
+                   <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
+                   <div class="db-connectivity-text">
+                     <h4>Media &amp; Thumbnails</h4>
+                     <p>Verifying media URL status...</p>
+                   </div>
+                 </div>
+               </div>
+             </div>
+
+             <!-- Diagnostics and Fix console -->
+             <div class="card" style="margin-bottom: 24px;">
+               <h3 class="card-title">Diagnostics &amp; Fix Console</h3>
+               <p class="card-subtitle" style="margin-bottom: 16px;">Resolves common configuration errors dynamically.</p>
+               <div class="diag-warnings-container" id="local-diagnostics-container">
+                 <!-- Dynamically populated diagnostics warning list -->
+               </div>
+             </div>
+
+             <!-- Local Port Monitor & Resource Monitor Row -->
+             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+               <!-- Local Port Conflict detector -->
+               <div class="card detail-card" id="overview-port-card" style="margin-top: 0;">
+                 <h3 class="card-title">Local Port Monitor</h3>
+                 <p class="card-subtitle">Verification of compose ports mapping availability</p>
+                 
+                 <div class="port-status-container" style="margin-top: 16px; flex: 1; display: flex; flex-direction: column; gap: 10px;">
+                   <div class="loading-state" id="ports-loading" style="padding: 20px;">
+                     <div class="spinner" style="width: 20px; height: 20px; margin-bottom: 8px;"></div>
+                     Checking local port availability...
+                   </div>
+                   <div id="ports-list" style="display: none; flex-direction: column; gap: 8px;">
+                     <!-- Dynamically populated ports status -->
+                   </div>
+                   <div id="ports-ok-alert" class="alert-box alert-success" style="display: none; margin: 0; font-size: 13px;">
+                     <strong>Port Status:</strong> All compose ports are free and available.
+                   </div>
+                   <div id="ports-conflict-alert" class="alert-box alert-danger" style="display: none; margin: 0; font-size: 13px;">
+                     <strong>PORT CONFLICT WARNING:</strong> One or more compose host ports are already bound by other local processes.
+                   </div>
+                 </div>
+               </div>
+
+               <!-- Dynamic Container Stats (Resource Monitor) -->
+               <div class="card detail-card" id="overview-resources-card" style="margin-top: 0;">
+                 <h3 class="card-title">Resource Monitor</h3>
+                 <p class="card-subtitle">Real-time local container metrics (CPU / Memory / Network)</p>
+                 
+                 <div class="resources-container" style="margin-top: 16px; flex: 1; display: flex; flex-direction: column; gap: 12px;">
+                   <div class="loading-state" id="resources-loading" style="padding: 20px;">
+                     <div class="spinner" style="width: 20px; height: 20px; margin-bottom: 8px;"></div>
+                     Polling container stats...
+                   </div>
+                   <div id="resources-list" style="display: none; flex-direction: column; gap: 10px;">
+                     <!-- Dynamically populated metrics -->
+                   </div>
+                   <div id="resources-empty" class="alert-box alert-info" style="display: none; margin: 0; font-size: 13px;">
+                     <strong>Metrics Status:</strong> No active containers running for this project.
+                   </div>
+                 </div>
+               </div>
+             </div>
+
+             <!-- Paths Grid (Mobile test paths) -->
+             <div class="card" style="margin-bottom: 24px;">
+               <h3 class="card-title" style="margin-bottom: 4px;">WordPress Local &amp; Mobile Test Paths</h3>
+               <p class="card-subtitle" style="margin-bottom: 16px;">Click to open direct URLs or scan local network addresses to check site rendering.</p>
+               <div class="paths-grid" id="local-paths-grid">
+                 <!-- Dynamically populated test path cards -->
+               </div>
+             </div>
+
+             <!-- Config Backups History -->
+             <div class="card detail-card" style="margin-bottom: 24px;">
+               <div class="card-header" style="margin-bottom: 16px;">
+                 <div>
+                   <h3 class="card-title">Live Config Backup History</h3>
+                   <p class="card-subtitle">Local configuration files are auto-saved on write. Rollback instantly if settings break.</p>
+                 </div>
+               </div>
+               
+               <div class="backups-container" id="local-backups-container">
+                 <!-- Dynamically populated rolling backups timeline -->
+                 <div class="loading-state" style="padding: 20px 0;">
+                   <div class="spinner"></div>
+                   Loading configuration backups history...
+                 </div>
+               </div>
+             </div>
+          </div>
+
+          <!-- SUB-PANEL: VPS PRODUCTION PARITY -->
+          <div id="sub-panel-vps-parity" class="parity-sub-panel" style="display: none;">
             <!-- Parity Toolbar -->
             <div class="card parity-toolbar-card" style="margin-bottom: 24px;">
               <div class="parity-toolbar-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
@@ -699,8 +709,8 @@
                   </svg>
                 </div>
                 <div class="metric-details">
-                  <span class="metric-label">Git Sync Status</span>
-                  <h3 class="metric-value" id="val-git-sync">-</h3>
+                   <span class="metric-label">Git Sync Status</span>
+                   <h3 class="metric-value" id="val-git-sync">-</h3>
                 </div>
               </div>
 
@@ -743,7 +753,6 @@
 
             <!-- Parity Main Section Grid -->
             <div class="parity-main-grid" id="parity-results" style="display: none; margin-top: 20px;">
-              
               <!-- Container Parity Check -->
               <div class="card detail-card" style="grid-column: span 2; margin-bottom: 24px;">
                 <h3 class="card-title">Services &amp; Container Parity</h3>
@@ -765,7 +774,7 @@
                 </div>
               </div>
 
-              <!-- Endpoint Health Check (All screens 200) -->
+              <!-- Endpoint Health Check -->
               <div class="card detail-card" style="grid-column: span 2; margin-bottom: 24px;">
                 <h3 class="card-title">Screen Status &amp; Performance Parity (HTTP 200)</h3>
                 <p class="card-subtitle" style="margin-bottom: 16px;">Fetches major application endpoints simultaneously to verify routing, latency, and matching page titles</p>
@@ -788,12 +797,11 @@
                 </div>
               </div>
 
-              <div class="parity-split-diagnostics" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+              <div class="parity-split-diagnostics" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%;">
                 <!-- System Diagnostics & Security Scan -->
                 <div class="card detail-card">
                   <h3 class="card-title">Security &amp; Port Audits</h3>
                   <p class="card-subtitle" style="margin-bottom: 16px;">Scans production payloads to prevent leaks and check SSL properties</p>
-                  
                   <div class="diagnostics-panel">
                     <div class="diag-item">
                       <span class="diag-label">Port Leak Check (9080 / 9082)</span>
@@ -822,7 +830,6 @@
                 <div class="card detail-card">
                   <h3 class="card-title">VPS Host Diagnostics</h3>
                   <p class="card-subtitle" style="margin-bottom: 16px;">Reports operating system metrics queried directly from the cloud provider virtual server</p>
-                  
                   <div class="diagnostics-panel">
                     <div class="diag-item">
                       <span class="diag-label">Root Disk Space Usage (df -h)</span>
@@ -847,7 +854,6 @@
                   </div>
                 </div>
               </div>
-
             </div>
 
             <!-- Parity Audit Loading State -->
@@ -871,103 +877,7 @@
                 <p class="card-subtitle" style="margin: 0; max-width: 480px; margin-left: auto; margin-right: auto;">Click the button above to run a live health check validation that production mirrors the local environments.</p>
               </div>
             </div>
-
           </div>
-        </section>
-
-        <!-- ================= LOCAL HEALTH & PATHS TAB ================= -->
-        <section id="tab-local-health" class="tab-panel">
-          
-          <!-- Header Row -->
-          <div class="health-dashboard-header">
-            <div class="health-dashboard-title-group">
-              <h2>Local Stack Diagnostics &amp; Paths</h2>
-              <p>Manage container health, paths, dynamic configs, and live recovery backups.</p>
-            </div>
-            <button id="local-restart-stack-btn" class="btn btn-danger flex-center" title="Force down and up of Podman Compose stack">
-              <svg viewBox="0 0 24 24" width="16" height="16">
-                <path fill="currentColor" d="M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12H4A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z"/>
-              </svg>
-              Restart Compose Stack
-            </button>
-          </div>
-
-          <!-- Containers Grid -->
-          <h3 class="card-title" style="margin-bottom: 12px; font-size: 16px;">Container Status Monitor</h3>
-          <div class="health-containers-grid" id="local-containers-grid">
-            <!-- Dynamically populated container cards (MySQL, Redis, PHP, Nginx, Edge) -->
-            <div class="card flex-center" style="grid-column: 1 / -1; padding: 30px;">
-              <div class="spinner" style="width: 24px; height: 24px; margin-right: 12px;"></div>
-              Loading local container status...
-            </div>
-          </div>
-
-          <!-- DB Connectivity Status Panel -->
-          <div class="db-connectivity-panel" id="local-db-connectivity">
-            <!-- Dynamically populated database connection info -->
-          </div>
-
-          <!-- HTTP Connection Verification Panels -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px;">
-            <div class="db-connectivity-panel" id="local-http-homescreen" style="margin-bottom: 0;">
-              <div class="db-connectivity-info">
-                <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
-                <div class="db-connectivity-text">
-                  <h4>MyPools Homescreen</h4>
-                  <p>Verifying connection status...</p>
-                </div>
-              </div>
-            </div>
-            <div class="db-connectivity-panel" id="local-http-wordpress" style="margin-bottom: 0;">
-              <div class="db-connectivity-info">
-                <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
-                <div class="db-connectivity-text">
-                  <h4>WordPress Engine</h4>
-                  <p>Verifying connection status...</p>
-                </div>
-              </div>
-            </div>
-            <div class="db-connectivity-panel" id="local-http-media-thumbnails" style="margin-bottom: 0;">
-              <div class="db-connectivity-info">
-                <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
-                <div class="db-connectivity-text">
-                  <h4>Media &amp; Thumbnails</h4>
-                  <p>Verifying media URL status...</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Configuration Diagnostics Alert / Fix Cards -->
-          <h3 class="card-title" style="margin-bottom: 12px; font-size: 16px;">Diagnostics &amp; Fix Console</h3>
-          <div class="diag-warnings-container" id="local-diagnostics-container">
-            <!-- Dynamically populated warnings or success alert -->
-          </div>
-
-          <!-- Local & Mobile Test Paths -->
-          <h3 class="card-title" style="margin-bottom: 12px; font-size: 16px;">WordPress Local &amp; Mobile Test Paths</h3>
-          <div class="paths-grid" id="local-paths-grid">
-            <!-- Dynamically populated test path cards -->
-          </div>
-
-          <!-- Configuration backup history timeline -->
-          <div class="card detail-card" style="margin-bottom: 24px;">
-            <div class="card-header" style="margin-bottom: 16px;">
-              <div>
-                <h3 class="card-title">Live Config Backup History</h3>
-                <p class="card-subtitle">Local configuration files are auto-saved on write. Rollback instantly if settings break.</p>
-              </div>
-            </div>
-            
-            <div class="backups-container" id="local-backups-container">
-              <!-- Dynamically populated rolling backups timeline -->
-              <div class="loading-state" style="padding: 20px 0;">
-                <div class="spinner"></div>
-                Loading configuration backups history...
-              </div>
-            </div>
-          </div>
-
         </section>
 
       </main>
