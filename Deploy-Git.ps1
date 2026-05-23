@@ -165,6 +165,12 @@ git -C $localRepo rm --cached database.sql 2>$null | Out-Null
 $localDumpFile = Join-Path $localRepo "database.sql"
 if (Test-Path $localDumpFile) { Remove-Item $localDumpFile -Force -ErrorAction SilentlyContinue }
 
+# Guarantee snapshot archives never appear in git — remove from index if somehow tracked
+git -C $localRepo rm --cached Snapshots/*/project.zip 2>$null | Out-Null
+git -C $localRepo rm --cached Snapshots/*/database.sql 2>$null | Out-Null
+git -C $localRepo rm --cached .snapshots/*/project.zip 2>$null | Out-Null
+git -C $localRepo rm --cached .snapshots/*/database.sql 2>$null | Out-Null
+
 $gitStatus = (git -C $localRepo status --porcelain)
 if (-not $gitStatus) {
     Write-Host "Working tree clean. Nothing to commit locally." -ForegroundColor Yellow
