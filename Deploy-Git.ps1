@@ -128,7 +128,7 @@ if ($SnapshotName) {
     }
     
     # Run local restore script
-    & $restoreScript -Project $ProjectName -SnapshotName $SnapshotName -SourcePath $localRepo -ConfirmRestore -SkipPreBackup
+    & $restoreScript -Project $ProjectName -SnapshotName $SnapshotName -SourcePath $localRepo -Force -SkipPreBackup
     Write-Host "[PRE-DEPLOYMENT] Local restore of snapshot complete. Commencing Git deployment." -ForegroundColor Green
 }
 
