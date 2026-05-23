@@ -1,0 +1,101 @@
+Walkthrough: Local Health & Paths Tab
+What Was Built
+A new Local Health & Paths dashboard tab has been fully implemented in the Snapshot Recovery Console. Access it from the sidebar at http://localhost:3050.
+
+Features
+1. Container Status Monitor
+Live grid showing all 5 Podman Compose services with real-time status:
+
+Service	Color	Status Source
+php	Purple	podman ps output
+nginx	Blue	podman ps output
+mysql	Amber	podman ps output
+redis	Red	podman ps output
+edge	Green	podman ps output
+Cards show container name, raw status text (Up 2 hours (healthy)), and color-coded border — green for running, red for stopped, grey for missing.
+
+2. MariaDB Connectivity Test
+Live test that runs inside the mysql container:
+
+podman exec -i <container> mariadb -u<user> -p<pass> -e "SELECT 1;"
+Falls back to mysql client if mariadb binary is not present. Shows ✓ Connected or ✗ Failed with the exact error message.
+
+3. Diagnostics & Fix Console
+Automatically scans:
+
+DB_HOST: Must be mysql (Compose service name), not localhost
+WP_HOME / WP_SITEURL: Warns if hardcoded (https://127.0.0.1:8443) instead of dynamic
+Nginx proxy_pass: Must point to http://php:80
+Nginx Host header: Must have proxy_set_header Host $http_host;
+Each issue shows a Quick Fix button that patches the file in-place and refreshes the view.
+
+4. WordPress Local & Mobile Test Paths
+Four path cards with all URLs for local and LAN testing:
+
+Card	URLs
+Host Direct HTTP	http://127.0.0.1:9080/{wp-admin,/,splash}
+Host HTTPS Edge	https://127.0.0.1:8443/{wp-admin,/,wp-login}
+Mobile LAN HTTP	http://192.168.x.x:9080/{splash,/,wp-admin}
+Mobile LAN HTTPS	https://192.168.x.x:8443/{splash,/,wp-admin}
+⚠️ Use HTTP on port 9080 (plain), HTTPS on 8443 (TLS edge). Do NOT use https://...9080 — that port has no TLS.
+
+Each URL has a one-click Copy button and opens in a new tab.
+
+LAN IP is auto-detected from network interfaces each poll cycle.
+
+5. Live Config Backup History
+Config files are watched automatically via fs.watch (started at server boot).
+
+Files watched per project:
+
+.env / .env.local
+compose.yml / compose.edge.yml
+nginx/edge/conf.d/*.conf
+nginx/conf.d/*.conf
+secrets/wp-config.local.php
+On any write, a timestamped .bak copy is saved to <project>/.local/config-backups/. Last 15 backups per file are retained.
+
+The tab shows a timeline of the last 30 backups with:
+
+Preview button — loads file content inline
+Restore button — copies backup back to its original path (with confirm dialog)
+6. Restart Compose Stack Button
+Top-right danger button runs podman compose down + podman compose up -d. Output streams to the Live Console (mini terminal).
+
+Files Changed
+File	Change
+server.js
+Added GET /api/local-health, POST /api/local-health/fix, GET /api/local-health/backups, POST /api/local-health/backups/restore. Fixed DB test to use mariadb binary.
+public/index.html
+Added sidebar nav button + full tab-local-health section
+public/app.js
+Added loadLocalHealth, startLocalHealthPolling, stopLocalHealthPolling, all render functions, fix/restore handlers
+public/style.css
+Added ~350 lines of glassmorphic styles for health grids, diagnostics cards, path cards, backup timeline
+All files synced to C:\ESSOP.
+
+Verification Results
+API response from GET /api/local-health?project=mypools:
+
+json
+
+{
+  "containers": {
+    "mysql": { "status": "running" },
+    "redis": { "status": "running" },
+    "php":   { "status": "running" },
+    "nginx": { "status": "running" },
+    "edge":  { "status": "running" }
+  },
+  "diagnostics": {
+    "wpConfig": { "dbHost": "ok", "wpUrls": "warning" },
+    "nginx":    { "upstream": "ok", "hostHeader": "ok" },
+    "dbConnectivity": { "status": "ok", "message": "Database connection verified (mariadb client inside container)." }
+  },
+  "network": {
+    "lanIp": "192.168.101.141",
+    "httpPort": "9080",
+    "edgePort": "8443"
+  }
+}
+The wpUrls: "warning" is expected — the WP config has https://127.0.0.1:8443 hardcoded. Use the Enable Dynamic URLs quick-fix button to patch it.
