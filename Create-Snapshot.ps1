@@ -332,11 +332,57 @@ if ($ExcludePaths) {
 
 $excludeExtensions = @(".sql", ".sql.gz", ".log")
 
+# ── Read .gitignore patterns and convert to archiver exclusions ──
+function Get-GitignoreExcludes {
+    param([string]$ProjPath)
+    
+    $patterns = @()
+    $gitignorePath = Join-Path $ProjPath ".gitignore"
+    if (-not (Test-Path $gitignorePath)) { return $patterns }
+    
+    $lines = Get-Content $gitignorePath | Where-Object {
+        $_.Trim() -ne "" -and -not $_.Trim().StartsWith("#")
+    }
+    
+    foreach ($line in $lines) {
+        $p = $line.Trim()
+        # Skip negation patterns (!) — those are inclusions, not exclusions
+        if ($p.StartsWith("!")) { continue }
+        # Remove trailing slash for directory patterns
+        $p = $p.TrimEnd('/')
+        # Skip patterns that are too broad (would exclude everything)
+        if ($p -eq "*" -or $p -eq "." -or $p -eq "..") { continue }
+        # Skip gitignore-specific syntax we don't support
+        if ($p -match '[\*\?\[\]]' -and $p -notmatch '/\*\*$') {
+            # Patterns with wildcards that aren't simple directory/** — skip for safety
+            if ($p -notmatch '^\*\.[a-z]+$') {
+                continue
+            }
+        }
+        $patterns += $p
+    }
+    
+    return $patterns
+}
+
+# Only apply .gitignore patterns for Medium/Low (git-deploy) levels.
+# High level (disaster recovery) keeps everything including env files and uploads.
+$gitignoreExcludes = @()
+if ($BackupLevel -eq "Medium" -or $BackupLevel -eq "Low") {
+    $gitignoreExcludes = Get-GitignoreExcludes -ProjPath $Source
+    if ($gitignoreExcludes.Count -gt 0) {
+        Write-Host "  Loaded $($gitignoreExcludes.Count) .gitignore exclusion patterns" -ForegroundColor DarkGray
+    }
+}
+
 function Should-Exclude {
     param([string]$RelativePath)
     
     $normalized = $RelativePath.Replace('\', '/').Trim('/')
+    $filename = [System.IO.Path]::GetFileName($normalized).ToLower()
+    $ext = [System.IO.Path]::GetExtension($normalized).ToLower()
     
+    # Check hardcoded exclude dirs
     foreach ($d in $excludeDirs) {
         $normD = $d.Replace('\', '/').Trim('/')
         if ($normalized -eq $normD -or 
@@ -347,12 +393,33 @@ function Should-Exclude {
         }
     }
     
-    $ext = [System.IO.Path]::GetExtension($normalized).ToLower()
+    # Check hardcoded extensions
     if ($ext -in $excludeExtensions) { return $true }
     
+    # Check .env exclusions (for Medium/Low levels)
     if ($excludeEnv) {
-        $filename = [System.IO.Path]::GetFileName($normalized).ToLower()
         if ($filename -eq ".env" -or ($filename.StartsWith(".env.") -and -not $filename.EndsWith(".example"))) {
+            return $true
+        }
+    }
+    
+    # Check .gitignore patterns
+    foreach ($p in $gitignoreExcludes) {
+        $normP = $p.Replace('\', '/').Trim('/')
+        # Simple filename match (e.g. "*.sql", "*.log")
+        if ($normP.StartsWith("*.")) {
+            $matchExt = $normP.Substring(1)
+            if ($filename.EndsWith($matchExt)) { return $true }
+            continue
+        }
+        # Exact directory/file match
+        if ($normalized -eq $normP) { return $true }
+        # Path starts with pattern (e.g. "wordpress/wp-content/plugins/elementor/")
+        if ($normalized.StartsWith("$normP/")) { return $true }
+        # Path contains the pattern as a directory component
+        if ($normalized -like "*/$normP/*" -or $normalized -like "*/$normP") { return $true }
+        # Pattern is just a directory name — match anywhere in path
+        if ($normP -notmatch '/' -and $normalized -match "(^|/)$([regex]::Escape($normP))(/|`$)") {
             return $true
         }
     }
