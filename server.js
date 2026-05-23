@@ -1235,8 +1235,8 @@ const server = http.createServer((req, res) => {
         projs.push({ name, path: targetPath });
         saveProjects(projs);
 
-        // Make sure the project has a .snapshots folder and a .local folder
-        const snapsPath = path.join(targetPath, '.snapshots');
+        // Make sure the project has a Snapshots folder and a .local folder
+        const snapsPath = path.join(targetPath, 'Snapshots');
         if (!fs.existsSync(snapsPath)) {
           fs.mkdirSync(snapsPath, { recursive: true });
         }
@@ -1986,12 +1986,16 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ error: 'Project path not found' }));
       return;
     }
-    const targetDir = path.join(projectPath, '.snapshots', name);
+    let targetDir = path.join(projectPath, 'Snapshots', name);
+    if (!fs.existsSync(targetDir)) {
+      targetDir = path.join(projectPath, '.snapshots', name);
+    }
 
-    // Safety check: ensure targetDir is within projectPath\.snapshots
+    // Safety check: ensure targetDir is within projectPath\Snapshots or projectPath\.snapshots
     const resolvedPath = path.resolve(targetDir);
-    const expectedPrefix = path.resolve(path.join(projectPath, '.snapshots'));
-    if (!resolvedPath.startsWith(expectedPrefix)) {
+    const expectedPrefix1 = path.resolve(path.join(projectPath, 'Snapshots'));
+    const expectedPrefix2 = path.resolve(path.join(projectPath, '.snapshots'));
+    if (!resolvedPath.startsWith(expectedPrefix1) && !resolvedPath.startsWith(expectedPrefix2)) {
       res.writeHead(403, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Access denied: unsafe path' }));
       return;
@@ -2246,7 +2250,10 @@ const server = http.createServer((req, res) => {
     }
 
     // 1. Read metadata of snapshot
-    const snapshotDir = path.join(localRepo, '.snapshots', snapshotName);
+    let snapshotDir = path.join(localRepo, 'Snapshots', snapshotName);
+    if (!fs.existsSync(snapshotDir)) {
+      snapshotDir = path.join(localRepo, '.snapshots', snapshotName);
+    }
     const snapMetadataPath = path.join(snapshotDir, 'snapshot.json');
     if (!fs.existsSync(snapMetadataPath)) {
       res.writeHead(404, { 'Content-Type': 'application/json' });

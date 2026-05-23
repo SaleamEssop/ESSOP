@@ -49,13 +49,28 @@ foreach ($proj in $projectsList) {
     $projName = $proj.Name
     $projPath = $proj.Path
 
-    $snapsPath = Join-Path $projPath ".snapshots"
-    $snapshots = @()
+    $snapsPath = Join-Path $projPath "Snapshots"
+    $legacySnapsPath = Join-Path $projPath ".snapshots"
+    
+    $snapshotsDirs = @()
     if (Test-Path $snapsPath) {
-        $snapshots = @(Get-ChildItem -Path $snapsPath -Directory -ErrorAction SilentlyContinue | Where-Object {
-            Test-Path (Join-Path $_.FullName "snapshot.json")
-        } | Sort-Object Name -Descending)
+        $snapshotsDirs += Get-ChildItem -Path $snapsPath -Directory -ErrorAction SilentlyContinue
     }
+    if (Test-Path $legacySnapsPath) {
+        $snapshotsDirs += Get-ChildItem -Path $legacySnapsPath -Directory -ErrorAction SilentlyContinue
+    }
+
+    $uniqueSnapshots = @{}
+    foreach ($snap in $snapshotsDirs) {
+        if (Test-Path (Join-Path $snap.FullName "snapshot.json")) {
+            if (-not $uniqueSnapshots.ContainsKey($snap.Name)) {
+                $uniqueSnapshots[$snap.Name] = $snap
+            }
+        }
+    }
+    
+    $snapshots = @($uniqueSnapshots.Values | Sort-Object Name -Descending)
+
 
     $projData = @{
         name = $projName

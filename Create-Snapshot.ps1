@@ -132,7 +132,7 @@ $composeFile = Join-Path $Source "compose.yml"
 if (-not (Test-Path $composeFile)) { throw "compose.yml not found at $composeFile" }
 $envFilePath = if (Test-Path (Join-Path $Source ".env.local")) { Join-Path $Source ".env.local" } else { Join-Path $Source ".env" }
 
-$ProjectSnapshotsRoot = Join-Path $Source ".snapshots"
+$ProjectSnapshotsRoot = Join-Path $Source "Snapshots"
 if (-not (Test-Path $ProjectSnapshotsRoot)) {
     New-Item -ItemType Directory -Path $ProjectSnapshotsRoot -Force | Out-Null
 }
@@ -305,6 +305,7 @@ $excludeDirs = @(
     "wp-content/upgrade",
     ".local",
     ".snapshots",
+    "Snapshots",
     "backups",
     "clone",
     "node_modules",

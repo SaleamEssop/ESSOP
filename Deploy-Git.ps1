@@ -106,8 +106,13 @@ Write-Host "Source Snapshot   : $SnapshotName"                            -Foreg
 # PRE-DEPLOYMENT: Local Restore of Selected Snapshot
 # ----------------------------------------------------
 if ($SnapshotName) {
-    $snapsPath = Join-Path $localRepo ".snapshots"
+    $snapsPath = Join-Path $localRepo "Snapshots"
     $snapshotDir = Join-Path $snapsPath $SnapshotName
+    if (-not (Test-Path $snapshotDir)) {
+        # Fallback to legacy project-relative .snapshots
+        $snapsPath = Join-Path $localRepo ".snapshots"
+        $snapshotDir = Join-Path $snapsPath $SnapshotName
+    }
     if (-not (Test-Path $snapshotDir)) {
         # Fallback to C:\snapshots\<ProjectName>
         $snapshotDir = Join-Path "C:\snapshots\$ProjectName" $SnapshotName

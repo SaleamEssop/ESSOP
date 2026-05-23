@@ -245,6 +245,10 @@
               <div>
                 <h3 class="card-title">Snapshot Restore &amp; Rollback</h3>
                 <p class="card-subtitle">Select an available snapshot to restore the project environment. Restoring will overwrite existing files.</p>
+                <div id="snapshot-breadcrumbs-path" class="snapshot-breadcrumbs" style="margin-top: 8px; font-size: 11px; color: var(--text-desc); display: flex; align-items: center; gap: 6px;">
+                  <span class="breadcrumb-label" style="font-weight: 500; color: var(--text-muted);">Active Folder:</span>
+                  <code id="snapshot-active-path" style="background: var(--bg-input); padding: 2px 6px; border-radius: var(--radius-sm); color: var(--color-accent); font-family: var(--font-family-mono); border: 1px solid var(--border-subtle);">Loading path...</code>
+                </div>
               </div>
               <button id="refresh-snapshots-btn" class="btn btn-secondary flex-center">
                 <svg viewBox="0 0 24 24" width="16" height="16" class="icon-refresh">

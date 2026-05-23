@@ -63,12 +63,17 @@ function Get-ProjectSourcePath {
 }
 
 $Source = Get-ProjectSourcePath -Proj $Project
-$projectSnapshotDir = Join-Path $Source ".snapshots"
+$projectSnapshotDir = Join-Path $Source "Snapshots"
+$legacyProjectSnapshotDir = Join-Path $Source ".snapshots"
 
 if (-not $SnapshotName) {
     $activeFile = Join-Path $projectSnapshotDir "active.txt"
     if (-not (Test-Path $activeFile)) {
-        # Fallback to legacy active.txt
+        # Fallback to legacy project-relative active.txt
+        $activeFile = Join-Path $legacyProjectSnapshotDir "active.txt"
+    }
+    if (-not (Test-Path $activeFile)) {
+        # Fallback to legacy C:\snapshots\<Project>\active.txt
         $legacyActiveFile = Join-Path "C:\snapshots\$Project" "active.txt"
         if (Test-Path $legacyActiveFile) {
             $activeFile = $legacyActiveFile
@@ -82,12 +87,18 @@ if (-not $SnapshotName) {
 
 $snapshotDir = Join-Path $projectSnapshotDir $SnapshotName
 if (-not (Test-Path $snapshotDir)) {
-    # Fallback to legacy path C:\snapshots\<Project>\<SnapshotName>
-    $legacyDir = Join-Path "C:\snapshots\$Project" $SnapshotName
-    if (Test-Path $legacyDir) {
-        $snapshotDir = $legacyDir
+    # Fallback to legacy project-relative path
+    $legacyProjectDir = Join-Path $legacyProjectSnapshotDir $SnapshotName
+    if (Test-Path $legacyProjectDir) {
+        $snapshotDir = $legacyProjectDir
     } else {
-        throw "Snapshot not found: $snapshotDir"
+        # Fallback to legacy path C:\snapshots\<Project>\<SnapshotName>
+        $legacyDir = Join-Path "C:\snapshots\$Project" $SnapshotName
+        if (Test-Path $legacyDir) {
+            $snapshotDir = $legacyDir
+        } else {
+            throw "Snapshot not found: $snapshotDir"
+        }
     }
 }
 

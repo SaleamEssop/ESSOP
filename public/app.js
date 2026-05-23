@@ -458,6 +458,11 @@ async function loadProjectSnapshots(project) {
     overviewDir.textContent = data.source_path || 'C:\\Podman\\' + project;
     overviewComposeName.textContent = project + '-local';
     overviewCount.textContent = (data.snapshots || []).length;
+
+    const activePathEl = document.getElementById('snapshot-active-path');
+    if (activePathEl) {
+      activePathEl.textContent = (data.source_path || ('C:\\Podman\\' + project)) + '\\Snapshots';
+    }
     
     snapshots = data.snapshots || [];
     if (snapshots.length > 0) {
