@@ -29,8 +29,9 @@ param(
     [string]$SourcePath,
     [switch]$Live,
     [switch]$NoDatabase,
-    [string]$ExcludePaths = "",
-    [int]$RetentionCount = 0
+    [string]$BackupLevel = "High",
+    [int]$RetentionCount = 5,
+    [string]$ExcludePaths = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,17 +43,6 @@ function Get-ProjectSourcePath {
 
     if ($SourcePath -and (Test-Path $SourcePath)) {
         return (Resolve-Path $SourcePath).Path
-    }
-
-    $projectsFile = Join-Path $script:SnapshotsRoot "projects.json"
-    if (Test-Path $projectsFile) {
-        try {
-            $projs = Get-Content $projectsFile -Raw | ConvertFrom-Json
-            $found = $projs | Where-Object { $_.name -eq $Proj } | Select-Object -First 1
-            if ($found -and (Test-Path $found.path)) {
-                return $found.path
-            }
-        } catch {}
     }
 
     $known = @{
@@ -103,12 +93,22 @@ function Read-ComposeEnv {
 }
 
 # ── Main ────────────────────────────────────────────────────
-Write-Host "[PROGRESS] 5% (Resolving paths and loading environment)"
 Write-Host "`n=== MyPools Snapshot - Create ===" -ForegroundColor Cyan
+
+# Normalize BackupLevel to title case
+$BackupLevel = (Get-Culture).TextInfo.ToTitleCase($BackupLevel.ToLower())
+if ($BackupLevel -notIn @("High", "Medium", "Low")) {
+    $BackupLevel = "High"
+}
+
+if ($BackupLevel -eq "Low") {
+    $NoDatabase = $true
+}
 
 $Source = Get-ProjectSourcePath -Proj $Project
 Write-Host "Project: $Project" -ForegroundColor White
 Write-Host "Source : $Source" -ForegroundColor White
+Write-Host "Level  : $BackupLevel" -ForegroundColor Yellow
 
 $envVars = Read-ComposeEnv -ProjPath $Source
 $composeProject = if ($envVars['COMPOSE_PROJECT_NAME']) { $envVars['COMPOSE_PROJECT_NAME'] } else { "$Project-local" }
@@ -117,41 +117,83 @@ if (-not (Test-Path $composeFile)) { throw "compose.yml not found at $composeFil
 $envFilePath = if (Test-Path (Join-Path $Source ".env.local")) { Join-Path $Source ".env.local" } else { Join-Path $Source ".env" }
 
 $timestamp = Get-Date -Format "yyyy-MM-dd-HHmm"
-$snapsPath = Join-Path $Source ".snapshots"
-$snapshotDir = Join-Path $snapsPath $timestamp
+$snapshotDir = Join-Path $SnapshotsRoot "$Project\$timestamp"
+if (Test-Path $snapshotDir) {
+    Remove-Item -Path $snapshotDir -Recurse -Force -ErrorAction SilentlyContinue
+}
 New-Item -ItemType Directory -Path $snapshotDir -Force | Out-Null
 Write-Host "Snapshot: $snapshotDir" -ForegroundColor White
 
-# Update gitignore
-$gitignorePath = Join-Path $Source ".gitignore"
-$ignoreEntries = @(".snapshots/", ".local/")
-if (Test-Path $gitignorePath) {
-    $content = Get-Content $gitignorePath
-    $toAppend = @()
-    foreach ($entry in $ignoreEntries) {
-        if ($content -notcontains $entry) {
-            $toAppend += $entry
-        }
-    }
-    if ($toAppend.Count -gt 0) {
-        $toAppend | Out-File -FilePath $gitignorePath -Encoding UTF8 -Append
-    }
-} else {
-    $ignoreEntries | Out-File -FilePath $gitignorePath -Encoding UTF8
-}
-
 if (-not ($NoDatabase -and $Live)) {
     if (-not (Get-Command podman -ErrorAction SilentlyContinue)) {
-        throw "podman not in PATH (required for database dump or container stop/start)"
-    }
-    Set-ComposeProvider | Out-Null
-
-    $containers = @(podman ps --filter "label=io.podman.compose.project=$composeProject" --format "{{.Names}}" 2>$null)
-    $containersRunning = $containers.Count -gt 0
-    if ($containersRunning) {
-        Write-Host "Containers running: $($containers -join ', ')" -ForegroundColor Green
+        Write-Warning "podman not in PATH. Skipping database dump & container management."
+        $NoDatabase = $true
+        $Live = $true
+        $containersRunning = $false
     } else {
-        Write-Host "No containers running for $composeProject" -ForegroundColor Yellow
+        Set-ComposeProvider | Out-Null
+
+        # Test if Podman engine is responding
+        $null = podman ps --format "{{.Names}}" 2>$null
+        $podmanOk = ($LASTEXITCODE -eq 0)
+
+        if (-not $podmanOk) {
+            Write-Warning "Podman is not responding. Attempting to restore Podman connection..."
+            
+            # 1. Kill any existing stuck podman CLI processes to release pipe/lock blocks
+            Write-Host "  Terminating stuck podman CLI processes..." -ForegroundColor DarkGray
+            Get-Process -Name "podman" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            
+            # 2. Check if WSL default machine is running
+            $wslDistros = try { wsl -l -v 2>$null } catch { "" }
+            $machineRunning = $false
+            if ($wslDistros -match "podman-machine-default\s+Running") {
+                $machineRunning = $true
+            }
+            
+            if ($machineRunning) {
+                Write-Host "  Podman machine is running but unresponsive. Performing WSL shutdown..." -ForegroundColor Yellow
+                try {
+                    wsl --shutdown 2>&1 | Out-Null
+                    Start-Sleep -Seconds 3
+                } catch {}
+            }
+            
+            # 3. Start the podman machine
+            Write-Host "  Starting Podman machine..." -ForegroundColor Cyan
+            try {
+                podman machine start 2>&1 | Out-Null
+                Start-Sleep -Seconds 12
+            } catch {
+                Write-Warning "Failed to start podman machine: $_"
+            }
+            
+            # 4. Re-test connection
+            $null = podman ps --format "{{.Names}}" 2>$null
+            $podmanOk = ($LASTEXITCODE -eq 0)
+            
+            if ($podmanOk) {
+                Write-Host "Podman connection successfully recovered!" -ForegroundColor Green
+            } else {
+                Write-Warning "Could not restore Podman connection. Skipping database dump & container states."
+                Write-Warning "Proceeding with file-only backup to ensure snapshot completes."
+                $NoDatabase = $true
+                $Live = $true
+            }
+        }
+
+        # If podman is now responsive, retrieve containers list
+        if ($podmanOk) {
+            $containers = @(podman ps --filter "label=io.podman.compose.project=$composeProject" --format "{{.Names}}" 2>$null)
+            $containersRunning = $containers.Count -gt 0
+            if ($containersRunning) {
+                Write-Host "Containers running: $($containers -join ', ')" -ForegroundColor Green
+            } else {
+                Write-Host "No containers running for $composeProject" -ForegroundColor Yellow
+            }
+        } else {
+            $containersRunning = $false
+        }
     }
 } else {
     $containersRunning = $false
@@ -161,7 +203,6 @@ if (-not ($NoDatabase -and $Live)) {
 # ── Step 1: Stop containers ─────────────────────────────────
 $wasStopped = $false
 if (-not $Live -and $containersRunning) {
-    Write-Host "[PROGRESS] 10% (Stopping containers for consistent snapshot...)"
     Write-Host "`nStopping containers for consistent snapshot..." -ForegroundColor Cyan
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
@@ -174,7 +215,6 @@ if (-not $Live -and $containersRunning) {
 # ── Step 2: Database dump ───────────────────────────────────
 $dbDumped = $false
 if (-not $NoDatabase) {
-    Write-Host "[PROGRESS] 20% (Preparing database dump...)"
     Write-Host "`nDumping database..." -ForegroundColor Cyan
 
     $dbName = if ($envVars['MYSQL_DATABASE']) { $envVars['MYSQL_DATABASE'] } else { $Project }
@@ -185,7 +225,6 @@ if (-not $NoDatabase) {
     } else {
         # If containers were stopped, start just mysql for the dump
         if ($wasStopped) {
-            Write-Host "[PROGRESS] 25% (Starting MySQL temporarily for database dump...)"
             Write-Host "  Starting MySQL temporarily for dump..." -ForegroundColor DarkGray
             $prev = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
@@ -206,32 +245,12 @@ if (-not $NoDatabase) {
         $mysqlPod = @(podman ps --filter "label=io.podman.compose.project=$composeProject" --format "{{.Names}}" | Where-Object { $_ -match "mysql" } | Select-Object -First 1)
         
         if ($mysqlPod) {
-            Write-Host "[PROGRESS] 35% (Executing database dump...)"
             $dumpFile = Join-Path $snapshotDir "database.sql"
-
-            # Probe which dump command works inside the container
-            $dumpCmd = "mariadb-dump"
-            $prevError = $ErrorActionPreference
-            $ErrorActionPreference = "Continue"
-            
-            # Check if mariadb-dump works
-            podman exec $mysqlPod mariadb-dump --version 2>$null | Out-Null
-            $mariadbDumpExit = $LASTEXITCODE
-            
-            # Check if mysqldump works
-            podman exec $mysqlPod mysqldump --version 2>$null | Out-Null
-            $mysqldumpExit = $LASTEXITCODE
-            
-            $ErrorActionPreference = $prevError
-
-            if ($mariadbDumpExit -eq 0) {
+            $dumpCmd = "mysqldump"
+            $detectDump = podman exec $mysqlPod sh -c "command -v mariadb-dump" 2>$null
+            if ($detectDump -and $detectDump.Trim() -ne "") {
                 $dumpCmd = "mariadb-dump"
-            } elseif ($mysqldumpExit -eq 0) {
-                $dumpCmd = "mysqldump"
-            } else {
-                throw "Neither 'mariadb-dump' nor 'mysqldump' database dump binary was found or could be executed in container $mysqlPod."
             }
-
             podman exec $mysqlPod $dumpCmd -uroot -p"$dbPass" --single-transaction --quick --lock-tables=false $dbName 2>$null | Out-File -FilePath $dumpFile -Encoding UTF8 -ErrorAction SilentlyContinue
 
             if ((Test-Path $dumpFile) -and (Get-Item $dumpFile).Length -gt 100) {
@@ -257,17 +276,14 @@ if (-not $NoDatabase) {
 }
 
 # ── Step 3: Zip project files ───────────────────────────────
-Write-Host "[PROGRESS] 40% (Scanning project files for archive...)"
 Write-Host "`nArchiving project files..." -ForegroundColor Cyan
 $zipFile = Join-Path $snapshotDir "project.zip"
 
 $excludeDirs = @(
-    "wp-content\uploads",
-    "wp-content\cache",
-    "wp-content\upgrade",
+    "wp-content/cache",
+    "wp-content/upgrade",
     ".local",
     ".snapshots",
-    "secrets",
     "backups",
     "clone",
     "node_modules",
@@ -277,12 +293,18 @@ $excludeDirs = @(
     "PROBOOK"
 )
 
+$excludeEnv = $false
+
+if ($BackupLevel -eq "Medium" -or $BackupLevel -eq "Low") {
+    $excludeDirs += "wp-content/uploads"
+    $excludeDirs += "secrets"
+    $excludeEnv = $true
+}
+
 if ($ExcludePaths) {
-    $customExcludes = $ExcludePaths.Split(",") | ForEach-Object { $_.Trim() }
-    foreach ($ce in $customExcludes) {
-        if ($ce -and $excludeDirs -notcontains $ce) {
-            $excludeDirs += $ce
-        }
+    $additionalExcludes = $ExcludePaths -split ',' | Where-Object { $_.Trim() -ne "" }
+    foreach ($path in $additionalExcludes) {
+        $excludeDirs += $path.Trim()
     }
 }
 
@@ -290,12 +312,29 @@ $excludeExtensions = @(".sql", ".sql.gz", ".log")
 
 function Should-Exclude {
     param([string]$RelativePath)
+    
+    $normalized = $RelativePath.Replace('\', '/').Trim('/')
+    
     foreach ($d in $excludeDirs) {
-        if ($RelativePath.StartsWith($d, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        $normD = $d.Replace('\', '/').Trim('/')
+        if ($normalized -eq $normD -or 
+            $normalized.StartsWith("$normD/") -or 
+            $normalized.EndsWith("/$normD") -or 
+            $normalized -like "*/$normD/*") {
+            return $true
+        }
     }
-    $ext = [System.IO.Path]::GetExtension($RelativePath).ToLower()
+    
+    $ext = [System.IO.Path]::GetExtension($normalized).ToLower()
     if ($ext -in $excludeExtensions) { return $true }
-    if ($RelativePath -eq ".env" -or $RelativePath -eq ".env.local" -or $RelativePath.EndsWith(".env.local")) { return $true }
+    
+    if ($excludeEnv) {
+        $filename = [System.IO.Path]::GetFileName($normalized).ToLower()
+        if ($filename -eq ".env" -or ($filename.StartsWith(".env.") -and -not $filename.EndsWith(".example"))) {
+            return $true
+        }
+    }
+    
     return $false
 }
 
@@ -307,55 +346,25 @@ $filesToArchive = @($allFiles | Where-Object {
 
 $fileCount = $filesToArchive.Count
 if ($fileCount -gt 0) {
-    Write-Host "Adding compression assemblies..." -ForegroundColor DarkGray
-    Add-Type -AssemblyName "System.IO.Compression"
-    Add-Type -AssemblyName "System.IO.Compression.FileSystem"
-
-    Write-Host "Creating zip archive..." -ForegroundColor DarkGray
-    $zipStream = [System.IO.File]::Create($zipFile)
-    $zipArchive = New-Object System.IO.Compression.ZipArchive($zipStream, [System.IO.Compression.ZipArchiveMode]::Create)
-
     try {
-        $i = 0
-        $lastPct = -1
-        $lastLoggedCount = 0
+        Add-Type -AssemblyName System.IO.Compression | Out-Null
+        Add-Type -AssemblyName System.IO.Compression.FileSystem | Out-Null
+        $zip = [System.IO.Compression.ZipFile]::Open($zipFile, [System.IO.Compression.ZipArchiveMode]::Create)
         foreach ($file in $filesToArchive) {
-            $i++
-            $rel = $file.FullName.Substring($Source.Length + 1)
-            # Replace backslashes with forward slashes for zip compatibility
-            $relZipPath = $rel.Replace("\", "/")
-            
-            # Progress calculation (from 40% to 85%)
-            $pct = [int](40 + ($i / $fileCount) * 45)
-            
-            # Log progress only when percentage changes or every 200 files, or on the first/last file
-            if ($pct -ne $lastPct -or ($i - $lastLoggedCount) -ge 200 -or $i -eq 1 -or $i -eq $fileCount) {
-                Write-Host "[PROGRESS] $pct% (Archiving: $i/$fileCount files - $relZipPath)"
-                $lastPct = $pct
-                $lastLoggedCount = $i
-            }
-
-            try {
-                [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $file.FullName, $relZipPath, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
-            } catch {
-                Write-Warning "Failed to archive file: $rel. Error: $($_.Exception.Message)"
-            }
+            $relPath = $file.FullName.Substring($Source.Length).TrimStart('\', '/').Replace('\', '/')
+            $null = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $relPath)
         }
-    } finally {
-        if ($zipArchive) { $zipArchive.Dispose() }
-        if ($zipStream) { $zipStream.Dispose() }
-    }
-    
-    if (Test-Path $zipFile) {
+        $zip.Dispose()
         $zipSize = "{0:N0} MB" -f ((Get-Item $zipFile).Length / 1MB)
         Write-Host "  Archived: $fileCount files ($zipSize)" -ForegroundColor Green
-    } else {
-        Write-Warning "Archive creation failed or empty."
+    } catch {
+        if ($null -ne $zip) { $zip.Dispose() }
+        Write-Warning "Archive failed: $($_.Exception.Message)"
+        throw $_
     }
 }
 
 # ── Step 4: Metadata ────────────────────────────────────────
-Write-Host "[PROGRESS] 90% (Writing snapshot metadata)"
 Write-Host "`nWriting metadata..." -ForegroundColor Cyan
 
 $gitCommit = try { git -C $Source rev-parse --short HEAD 2>$null } catch { "unknown" }
@@ -376,6 +385,7 @@ $metadata = @{
     powered_off_snapshot = $wasStopped
     git_commit           = $gitCommit
     git_branch           = $gitBranch
+    backup_level         = $BackupLevel
 }
 $metadata | ConvertTo-Json -Depth 4 | Out-File -FilePath (Join-Path $snapshotDir "snapshot.json") -Encoding UTF8
 
@@ -411,7 +421,6 @@ $recoveryMd | Out-File -FilePath (Join-Path $snapshotDir "recovery.md") -Encodin
 
 # ── Step 5: Restart containers ──────────────────────────────
 if ($wasStopped) {
-    Write-Host "[PROGRESS] 95% (Restarting containers...)"
     Write-Host "`nRestarting containers..." -ForegroundColor Cyan
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
@@ -421,22 +430,26 @@ if ($wasStopped) {
 }
 
 # ── Step 6: Update active.txt ───────────────────────────────
-$activeFile = Join-Path $Source ".snapshots\active.txt"
+$activeFile = Join-Path $SnapshotsRoot "$Project\active.txt"
 $timestamp | Out-File -FilePath $activeFile -Encoding UTF8 -NoNewline
 
-# ── Step 6.5: Prune old snapshots based on Retention Policy ──
-if ($RetentionCount -gt 0) {
-    Write-Host "`nPruning old snapshots (Retention Limit: $RetentionCount)..." -ForegroundColor Cyan
-    $existingSnaps = @(Get-ChildItem -Path $snapsPath -Directory -ErrorAction SilentlyContinue | Where-Object {
+# ── Step 8: Enforce snapshot retention limit ────────────────
+Write-Host "`nEnforcing $RetentionCount-snapshot retention limit..." -ForegroundColor Cyan
+$projectDir = Join-Path $SnapshotsRoot $Project
+if (Test-Path $projectDir) {
+    $snapshots = Get-ChildItem -Path $projectDir -Directory | Where-Object {
         Test-Path (Join-Path $_.FullName "snapshot.json")
-    } | Sort-Object Name -Descending)
-
-    if ($existingSnaps.Count -gt $RetentionCount) {
-        $toDelete = $existingSnaps | Select-Object -Skip $RetentionCount
-        foreach ($snap in $toDelete) {
-            Write-Host "Pruning old snapshot directory: $($snap.Name)" -ForegroundColor Yellow
-            Remove-Item -Path $snap.FullName -Recurse -Force | Out-Null
+    } | Sort-Object Name -Descending
+    
+    if ($snapshots.Count -gt $RetentionCount) {
+        $toDelete = $snapshots[$RetentionCount..($snapshots.Count - 1)]
+        Write-Host "Found $($snapshots.Count) snapshots. Deleting $($toDelete.Count) older snapshot(s) to enforce limit of $RetentionCount..." -ForegroundColor Yellow
+        foreach ($snapToDelete in $toDelete) {
+            Write-Host "  Deleting oldest snapshot: $($snapToDelete.Name)" -ForegroundColor DarkGray
+            Remove-Item -Path $snapToDelete.FullName -Recurse -Force -ErrorAction SilentlyContinue
         }
+    } else {
+        Write-Host "Snapshots count ($($snapshots.Count)) is within limit of $RetentionCount. No pruning needed." -ForegroundColor Green
     }
 }
 
@@ -447,7 +460,6 @@ if (Test-Path $refreshScript) {
 }
 
 # ── Summary ─────────────────────────────────────────────────
-Write-Host "[PROGRESS] 100% (Snapshot complete)"
 Write-Host "`n=== Snapshot Complete ===" -ForegroundColor Green
 Write-Host "Location: $snapshotDir" -ForegroundColor White
 Write-Host "Files   : project.zip ($fileCount files)" -ForegroundColor White

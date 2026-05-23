@@ -28,17 +28,17 @@
       </div>
       
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-tab="overview">
+        <button class="nav-item active" data-tab="snapshots">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Zm-3,6a3,3,0,1,1,3,3A3,3,0,0,1,9,12Z"/>
+          </svg>
+          Restore from Snapshot
+        </button>
+        <button class="nav-item" data-tab="overview">
           <svg viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor" d="M10,20H14V14H10V20M4,20H8V10H4V20M16,20H20V6H16V20M3,22H21V24H3V22M10,2H14V12H10V2M4,5H8V8H4V5M16,2H20V4H16V2Z"/>
           </svg>
           Overview
-        </button>
-        <button class="nav-item" data-tab="snapshots">
-          <svg viewBox="0 0 24 24" width="20" height="20">
-            <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12c0,5.52,4.48,10,10,10a9.9,9.9,0,0,0,7.07-2.93l-1.41-1.41A7.92,7.92,0,0,1,12,20c-4.41,0-8-3.59-8-8s3.59-8,8-8,8,3.59,8,8a7.84,7.84,0,0,1-1.17,4.07l1.52,1.3A9.87,9.87,0,0,0,22,12,10,10,0,0,0,12,2Zm0,4a6,6,0,1,0,6,6A6,6,0,0,0,12,6Zm-3,6a3,3,0,1,1,3,3A3,3,0,0,1,9,12Z"/>
-          </svg>
-          Snapshots List
         </button>
         <button class="nav-item" data-tab="explorer">
           <svg viewBox="0 0 24 24" width="20" height="20">
@@ -63,6 +63,12 @@
             <path fill="currentColor" d="M12,2A10,10,0,1,0 22,12A10,10,0,0,0 12,2M12,4A8,8 0 1,1 4,12A8,8 0 0,1 12,4M12,18A6,6 0 1,0 6,12A6,6 0 0,0 12,18M12,8A4,4 0 1,1 8,12A4,4 0 0,1 12,8Z"/>
           </svg>
           Health & Parity
+        </button>
+        <button class="nav-item" data-tab="local-health">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M12 2C6.47 2 2 6.47 2 12S6.47 22 12 22 22 17.53 22 12 17.53 2 12 2M17 13H14.5L12.5 7L10.5 17L9.5 13H7V11H8.5L9.5 15L11.5 5L13.5 15L14.5 11H17V13Z"/>
+          </svg>
+          Local Health & Paths
         </button>
         <button class="nav-item" data-tab="terminal">
           <svg viewBox="0 0 24 24" width="20" height="20">
@@ -97,7 +103,7 @@
           <div class="breadcrumbs">
             <span class="breadcrumb-parent">Snapshot Console</span>
             <span class="breadcrumb-separator">/</span>
-            <span class="breadcrumb-active" id="current-tab-title">Overview</span>
+            <span class="breadcrumb-active" id="current-tab-title">Restore from Snapshot</span>
           </div>
         </div>
         
@@ -125,7 +131,7 @@
       <main class="app-main-content">
         
         <!-- ================= OVERVIEW TAB ================= -->
-        <section id="tab-overview" class="tab-panel active">
+        <section id="tab-overview" class="tab-panel">
           
           <!-- State Overview Cards -->
           <div class="overview-grid-metrics">
@@ -207,19 +213,20 @@
                 <div class="form-group">
                   <input type="text" id="rapid-desc" placeholder="Snapshot description (e.g. baseline backup)" required>
                 </div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                  <label for="rapid-level" style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-desc); letter-spacing: 0.05em;">Backup Level</label>
+                  <select id="rapid-level" class="form-control select-dropdown" style="background-color: var(--bg-input); color: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 10px; font-family: var(--font-family-sans); font-size: 13px; outline: none; transition: all 0.2s; cursor: pointer; width: 100%;">
+                    <option value="High" selected>High (Complete Recovery State - files, uploads, secrets & DB)</option>
+                    <option value="Medium">Medium (Code + Database dump, excludes uploads & secrets)</option>
+                    <option value="Low">Low (Code files only, excludes DB, uploads & secrets)</option>
+                  </select>
+                </div>
                 <div class="form-row-checkboxes">
                   <label class="switch-container">
                     <input type="checkbox" id="rapid-live">
                     <span class="switch-slider"></span>
                     <span class="switch-label-text">
                       <strong>Live (no shutdown)</strong>
-                    </span>
-                  </label>
-                  <label class="switch-container">
-                    <input type="checkbox" id="rapid-nodb">
-                    <span class="switch-slider"></span>
-                    <span class="switch-label-text">
-                      <strong>Exclude DB</strong>
                     </span>
                   </label>
                 </div>
@@ -277,12 +284,12 @@
         </section>
 
         <!-- ================= SNAPSHOTS TAB ================= -->
-        <section id="tab-snapshots" class="tab-panel">
+        <section id="tab-snapshots" class="tab-panel active">
           <div class="card panel-full-card">
             <div class="card-header">
               <div>
-                <h3 class="card-title">Recovery Points Registry</h3>
-                <p class="card-subtitle">Manage recovery backups. Restores will overwrite existing project directories.</p>
+                <h3 class="card-title">Snapshot Restore & Rollback</h3>
+                <p class="card-subtitle">Select an available snapshot to restore the project environment. Restoring will overwrite existing files.</p>
               </div>
               <button id="refresh-snapshots-btn" class="btn btn-secondary flex-center">
                 <svg viewBox="0 0 24 24" width="16" height="16" class="icon-refresh">
@@ -292,29 +299,12 @@
               </button>
             </div>
 
-            <div class="table-container">
-              <table class="snapshots-table">
-                <thead>
-                  <tr>
-                    <th>Created</th>
-                    <th>Description</th>
-                    <th>Consistent</th>
-                    <th>Database</th>
-                    <th>Files Archive</th>
-                    <th>Git Reference</th>
-                    <th class="actions-header">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="snapshots-grid-body">
-                  <!-- Dynamically populated -->
-                  <tr>
-                    <td colspan="7" class="loading-state">
-                      <div class="spinner"></div>
-                      Loading registry data...
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="snapshots-cards-container" id="snapshots-grid-body">
+              <!-- Dynamically populated cards -->
+              <div class="loading-state">
+                <div class="spinner"></div>
+                Loading snapshots registry...
+              </div>
             </div>
           </div>
         </section>
@@ -367,19 +357,21 @@
                   <input type="text" id="explorer-desc" placeholder="e.g. Baseline without media folder" required>
                 </div>
 
+                <div class="form-group" style="margin-top: 12px; margin-bottom: 12px;">
+                  <label for="explorer-level" style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-desc); letter-spacing: 0.05em;">Backup Level</label>
+                  <select id="explorer-level" class="form-control select-dropdown" style="background-color: var(--bg-input); color: #fff; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 10px; font-family: var(--font-family-sans); font-size: 13px; outline: none; transition: all 0.2s; cursor: pointer; width: 100%;">
+                    <option value="High" selected>High (Complete Recovery State - files, uploads, secrets & DB)</option>
+                    <option value="Medium">Medium (Code + Database dump, excludes uploads & secrets)</option>
+                    <option value="Low">Low (Code files only, excludes DB, uploads & secrets)</option>
+                  </select>
+                </div>
+
                 <div class="form-checkboxes">
                   <label class="switch-container">
                     <input type="checkbox" id="explorer-live">
                     <span class="switch-slider"></span>
                     <span class="switch-label-text">
                       <strong>Live backup (no shutdown)</strong>
-                    </span>
-                  </label>
-                  <label class="switch-container">
-                    <input type="checkbox" id="explorer-nodb">
-                    <span class="switch-slider"></span>
-                    <span class="switch-label-text">
-                      <strong>Exclude MySQL database</strong>
                     </span>
                   </label>
                 </div>
@@ -887,6 +879,101 @@
             </div>
 
           </div>
+        </section>
+
+        <!-- ================= LOCAL HEALTH & PATHS TAB ================= -->
+        <section id="tab-local-health" class="tab-panel">
+          
+          <!-- Header Row -->
+          <div class="health-dashboard-header">
+            <div class="health-dashboard-title-group">
+              <h2>Local Stack Diagnostics &amp; Paths</h2>
+              <p>Manage container health, paths, dynamic configs, and live recovery backups.</p>
+            </div>
+            <button id="local-restart-stack-btn" class="btn btn-danger flex-center" title="Force down and up of Podman Compose stack">
+              <svg viewBox="0 0 24 24" width="16" height="16">
+                <path fill="currentColor" d="M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12H4A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z"/>
+              </svg>
+              Restart Compose Stack
+            </button>
+          </div>
+
+          <!-- Containers Grid -->
+          <h3 class="card-title" style="margin-bottom: 12px; font-size: 16px;">Container Status Monitor</h3>
+          <div class="health-containers-grid" id="local-containers-grid">
+            <!-- Dynamically populated container cards (MySQL, Redis, PHP, Nginx, Edge) -->
+            <div class="card flex-center" style="grid-column: 1 / -1; padding: 30px;">
+              <div class="spinner" style="width: 24px; height: 24px; margin-right: 12px;"></div>
+              Loading local container status...
+            </div>
+          </div>
+
+          <!-- DB Connectivity Status Panel -->
+          <div class="db-connectivity-panel" id="local-db-connectivity">
+            <!-- Dynamically populated database connection info -->
+          </div>
+
+          <!-- HTTP Connection Verification Panels -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <div class="db-connectivity-panel" id="local-http-homescreen" style="margin-bottom: 0;">
+              <div class="db-connectivity-info">
+                <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
+                <div class="db-connectivity-text">
+                  <h4>MyPools Homescreen</h4>
+                  <p>Verifying connection status...</p>
+                </div>
+              </div>
+            </div>
+            <div class="db-connectivity-panel" id="local-http-wordpress" style="margin-bottom: 0;">
+              <div class="db-connectivity-info">
+                <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
+                <div class="db-connectivity-text">
+                  <h4>WordPress Engine</h4>
+                  <p>Verifying connection status...</p>
+                </div>
+              </div>
+            </div>
+            <div class="db-connectivity-panel" id="local-http-media-thumbnails" style="margin-bottom: 0;">
+              <div class="db-connectivity-info">
+                <div class="spinner" style="width: 16px; height: 16px; margin-right: 8px;"></div>
+                <div class="db-connectivity-text">
+                  <h4>Media &amp; Thumbnails</h4>
+                  <p>Verifying media URL status...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Configuration Diagnostics Alert / Fix Cards -->
+          <h3 class="card-title" style="margin-bottom: 12px; font-size: 16px;">Diagnostics &amp; Fix Console</h3>
+          <div class="diag-warnings-container" id="local-diagnostics-container">
+            <!-- Dynamically populated warnings or success alert -->
+          </div>
+
+          <!-- Local & Mobile Test Paths -->
+          <h3 class="card-title" style="margin-bottom: 12px; font-size: 16px;">WordPress Local &amp; Mobile Test Paths</h3>
+          <div class="paths-grid" id="local-paths-grid">
+            <!-- Dynamically populated test path cards -->
+          </div>
+
+          <!-- Configuration backup history timeline -->
+          <div class="card detail-card" style="margin-bottom: 24px;">
+            <div class="card-header" style="margin-bottom: 16px;">
+              <div>
+                <h3 class="card-title">Live Config Backup History</h3>
+                <p class="card-subtitle">Local configuration files are auto-saved on write. Rollback instantly if settings break.</p>
+              </div>
+            </div>
+            
+            <div class="backups-container" id="local-backups-container">
+              <!-- Dynamically populated rolling backups timeline -->
+              <div class="loading-state" style="padding: 20px 0;">
+                <div class="spinner"></div>
+                Loading configuration backups history...
+              </div>
+            </div>
+          </div>
+
         </section>
 
       </main>

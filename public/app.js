@@ -65,7 +65,7 @@ const overviewComposeName = document.getElementById('overview-compose-name');
 const overviewRapidForm = document.getElementById('overview-rapid-form');
 const rapidDescInput = document.getElementById('rapid-desc');
 const rapidLiveCheck = document.getElementById('rapid-live');
-const rapidNoDbCheck = document.getElementById('rapid-nodb');
+const rapidLevelSelect = document.getElementById('rapid-level');
 
 // Snapshots Tab
 const snapshotsGridBody = document.getElementById('snapshots-grid-body');
@@ -81,7 +81,7 @@ const emptyExcludesLabel = document.getElementById('empty-excludes-label');
 const explorerSnapshotForm = document.getElementById('explorer-snapshot-form');
 const explorerDescInput = document.getElementById('explorer-desc');
 const explorerLiveCheck = document.getElementById('explorer-live');
-const explorerNoDbCheck = document.getElementById('explorer-nodb');
+const explorerLevelSelect = document.getElementById('explorer-level');
 const explorerSubmitBtn = document.getElementById('explorer-submit-btn');
 
 // Terminal Tab
@@ -365,6 +365,12 @@ navItems.forEach(item => {
       stopStatsPolling();
     }
 
+    if (targetTab === 'local-health') {
+      startLocalHealthPolling();
+    } else {
+      stopLocalHealthPolling();
+    }
+
     if (targetTab === 'settings') {
       loadSettings();
     } else if (targetTab === 'git') {
@@ -420,12 +426,10 @@ async function loadProjects() {
 // --- Fetch API: Load Snapshots for Project ---
 async function loadProjectSnapshots(project) {
   snapshotsGridBody.innerHTML = `
-    <tr>
-      <td colspan="7" class="loading-state">
-        <div class="spinner"></div>
-        Loading snapshots registry...
-      </td>
-    </tr>
+    <div class="loading-state" style="padding: 40px; display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%;">
+      <div class="spinner"></div>
+      <span>Loading snapshots registry...</span>
+    </div>
   `;
 
   try {
@@ -469,9 +473,20 @@ async function loadProjectSnapshots(project) {
 function renderSnapshotsTable() {
   snapshotsGridBody.innerHTML = '';
   snapshots.forEach((snap, idx) => {
-    const tr = document.createElement('tr');
+    const card = document.createElement('div');
+    card.className = 'snapshot-card';
     if (idx === 0) {
-      tr.className = 'latest-snapshot';
+      card.className += ' latest';
+    }
+
+    const levelVal = snap.backup_level || 'High';
+    let levelBadge = '';
+    if (levelVal === 'High') {
+      levelBadge = '<span class="badge badge-success">High (Complete)</span>';
+    } else if (levelVal === 'Medium') {
+      levelBadge = '<span class="badge badge-teal">Medium (Code+DB)</span>';
+    } else {
+      levelBadge = '<span class="badge badge-muted">Low (Code Only)</span>';
     }
 
     const typeBadge = snap.powered_off
@@ -479,67 +494,103 @@ function renderSnapshotsTable() {
       : '<span class="badge badge-warning">Live</span>';
 
     const dbBadge = snap.database_included
-      ? '<span class="badge badge-teal">Included</span>'
-      : '<span class="badge badge-muted">None</span>';
+      ? '<span class="badge badge-teal">Database Included</span>'
+      : '<span class="badge badge-muted">No DB</span>';
 
     const filesBadge = snap.files_included
-      ? `<span class="badge badge-teal" title="${snap.files_count} files">Included</span>`
-      : '<span class="badge badge-muted">None</span>';
+      ? `<span class="badge badge-teal" title="${snap.files_count} files">Files Included</span>`
+      : '<span class="badge badge-muted">No Files</span>';
 
     const gitCommit = snap.git_commit && snap.git_commit !== 'unknown'
-      ? `<div class="git-branch">${snap.git_branch}</div><span class="git-code">${snap.git_commit}</span>`
-      : '<span class="text-muted">-</span>';
+      ? `
+        <div class="snapshot-card-git-info">
+          <svg class="git-icon" viewBox="0 0 24 24" width="14" height="14" style="margin-right: 4px; display: inline-block; vertical-align: middle;">
+            <path fill="currentColor" d="M12,2A10,10,0,0,0,2,12C2,16.42 4.87,20.17 8.84,21.5C9.34,21.58 9.5,21.27 9.5,21C9.5,20.77 9.5,20.14 9.5,19.31C6.73,19.91 6.14,17.97 6.14,17.97C5.68,16.81 5.03,16.5 5.03,16.5C4.12,15.88 5.1,15.9 5.1,15.9C6.1,15.97 6.63,16.93 6.63,16.93C7.5,18.45 8.97,18 9.54,17.76C9.63,17.11 9.89,16.67 10.17,16.42C7.95,16.17 5.62,15.31 5.62,11.5C5.62,10.39 6,9.5 6.65,8.79C6.55,8.54 6.2,7.5 6.75,6.15C6.75,6.15 7.59,5.88 9.5,7.17C10.29,6.95 11.15,6.84 12,6.84C12.85,6.84 13.71,6.95 14.5,7.17C16.41,5.88 17.25,6.15 17.25,6.15C17.8,7.5 17.45,8.54 17.35,8.79C18,9.5 18.38,10.39 18.38,11.5C18.38,15.32 16.04,16.16 13.81,16.41C14.17,16.72 14.5,17.33 14.5,18.26C14.5,19.6 14.5,20.68 14.5,21C14.5,21.27 14.66,21.59 15.17,21.5C19.14,20.16 22,16.42 22,12A10,10,0,0,0,12,2Z"/>
+          </svg>
+          <span class="git-branch" style="vertical-align: middle;">${snap.git_branch}</span>
+          <span class="git-separator" style="margin: 0 4px; vertical-align: middle;">@</span>
+          <code class="git-hash" style="font-family: var(--font-family-mono); color: var(--color-teal); vertical-align: middle;">${snap.git_commit.substring(0, 7)}</code>
+        </div>
+      `
+      : '';
 
-    tr.innerHTML = `
-      <td>
-        <div class="time-col">
+    card.innerHTML = `
+      <div class="snapshot-card-header">
+        <div class="snapshot-card-time-group">
           <span class="time-relative">${getRelativeTime(snap.timestamp)}</span>
           <span class="time-absolute">${getAbsoluteTime(snap.timestamp)}</span>
         </div>
-      </td>
-      <td>
-        <div class="desc-text" title="${snap.description}">${snap.description}</div>
-      </td>
-      <td>${typeBadge}</td>
-      <td>${dbBadge}</td>
-      <td>${filesBadge}</td>
-      <td>${gitCommit}</td>
-      <td class="actions-col">
-        <button class="btn-text-primary restore-btn-trigger">Restore</button>
-        <button class="btn-text-danger delete-btn-trigger">Delete</button>
-      </td>
+        <div class="snapshot-card-badges">
+          ${levelBadge}
+          ${typeBadge}
+          ${dbBadge}
+          ${filesBadge}
+        </div>
+      </div>
+      <div class="snapshot-card-body">
+        <div class="snapshot-card-folder-row">
+          <svg class="folder-icon" viewBox="0 0 24 24" width="16" height="16" style="vertical-align: middle;">
+            <path fill="currentColor" d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/>
+          </svg>
+          <code class="folder-name" style="vertical-align: middle;">${snap.name}</code>
+        </div>
+        <h4 class="snapshot-card-desc">${snap.description}</h4>
+        ${gitCommit}
+      </div>
+      <div class="snapshot-card-actions">
+        <button class="btn btn-success btn-restore restore-btn-trigger">
+          <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px; display: inline-block; vertical-align: middle;">
+            <path fill="currentColor" d="M12,5V1L7,6L12,11V7A6,6 0 0,1 18,13A6,6 0 0,1 12,19A6,6 0 0,1 6,13H4A8,8 0 0,0 12,21A8,8 0 0,0 20,13A8,8 0 0,0 12,5Z"/>
+          </svg>
+          <span style="vertical-align: middle;">Restore to this Snapshot</span>
+        </button>
+        <button class="btn btn-outline-danger btn-delete delete-btn-trigger" title="Delete Snapshot">
+          <svg viewBox="0 0 24 24" width="16" height="16" style="display: inline-block; vertical-align: middle;">
+            <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+          </svg>
+          <span style="vertical-align: middle;">Delete</span>
+        </button>
+      </div>
     `;
 
-    // Bind event handlers for action links
-    tr.querySelector('.restore-btn-trigger').addEventListener('click', () => triggerRestoreConfirm(snap));
-    tr.querySelector('.delete-btn-trigger').addEventListener('click', () => triggerDeleteConfirm(snap));
-
-    snapshotsGridBody.appendChild(tr);
+    // Bind event handlers for action buttons
+    card.querySelector('.restore-btn-trigger').addEventListener('click', () => triggerRestoreConfirm(snap));
+    card.querySelector('.delete-btn-trigger').addEventListener('click', () => triggerDeleteConfirm(snap));
+    snapshotsGridBody.appendChild(card);
   });
 }
 
 function renderEmptyState() {
   snapshotsGridBody.innerHTML = `
-    <tr>
-      <td colspan="7" class="empty-state">
-        <svg viewBox="0 0 24 24" width="48" height="48" class="empty-state-icon">
+    <div class="empty-state-card flex-center" style="padding: 60px 20px; text-align: center; flex-direction: column; gap: 16px; width: 100%;">
+      <div style="background: rgba(30, 41, 59, 0.5); padding: 16px; border-radius: 50%; border: 1px solid var(--border-subtle); display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); margin-bottom: 8px;">
+        <svg viewBox="0 0 24 24" width="36" height="36">
           <path fill="currentColor" d="M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z"/>
         </svg>
-        <p>No recovery snapshots found for project <strong>${currentProject}</strong>.</p>
-        <p style="font-size: 12px; margin-top: 4px;">Use the sidebar or rapid snapshot panel to create one.</p>
-      </td>
-    </tr>
+      </div>
+      <div>
+        <h4 style="font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px;">No Snapshots Found</h4>
+        <p class="card-subtitle" style="margin: 0; max-width: 480px;">No recovery snapshots found for project <strong>${currentProject}</strong>.</p>
+        <p class="card-subtitle" style="font-size: 12px; margin-top: 4px;">Use the sidebar or rapid snapshot panel to create one.</p>
+      </div>
+    </div>
   `;
 }
 
 function renderErrorState() {
   snapshotsGridBody.innerHTML = `
-    <tr>
-      <td colspan="7" class="empty-state">
-        <p class="text-danger"><strong>Error: Could not retrieve snapshots registry.</strong></p>
-        <p style="font-size: 12px; margin-top: 4px;">Check console logs or verify the local server is operating correctly.</p>
-      </td>
-    </tr>
+    <div class="empty-state-card flex-center" style="padding: 60px 20px; text-align: center; flex-direction: column; gap: 16px; width: 100%;">
+      <div style="background: rgba(239, 68, 68, 0.1); padding: 16px; border-radius: 50%; border: 1px solid rgba(239, 68, 68, 0.2); display: inline-flex; align-items: center; justify-content: center; color: var(--color-danger); margin-bottom: 8px;">
+        <svg viewBox="0 0 24 24" width="36" height="36">
+          <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2M13 17H11V15H13V17M13 13H11V7H13V13Z"/>
+        </svg>
+      </div>
+      <div>
+        <h4 style="font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px;">Failed to Retrieve Snapshots</h4>
+        <p class="card-subtitle" style="margin: 0; max-width: 480px; color: var(--color-danger);"><strong>Error: Could not retrieve snapshots registry from the server.</strong></p>
+        <p class="card-subtitle" style="font-size: 12px; margin-top: 4px;">Check backend console logs or verify the local server is operating correctly.</p>
+      </div>
+    </div>
   `;
 }
 
@@ -993,13 +1044,15 @@ overviewRapidForm.addEventListener('submit', async (e) => {
 
   const desc = rapidDescInput.value.trim();
   const live = rapidLiveCheck.checked;
-  const noDb = rapidNoDbCheck.checked;
+  const backupLevel = rapidLevelSelect.value;
+  const noDb = (backupLevel === 'Low');
 
   await triggerSnapshotCreation({
     project: currentProject,
     description: desc,
     live,
     noDb,
+    backupLevel,
     excludePaths: []
   });
 
@@ -1017,7 +1070,8 @@ explorerSnapshotForm.addEventListener('submit', async (e) => {
 
   const desc = explorerDescInput.value.trim();
   const live = explorerLiveCheck.checked;
-  const noDb = explorerNoDbCheck.checked;
+  const backupLevel = explorerLevelSelect.value;
+  const noDb = (backupLevel === 'Low');
 
   // Convert Set to array of exclusion paths
   const excludePaths = Array.from(excludedPaths);
@@ -1027,6 +1081,7 @@ explorerSnapshotForm.addEventListener('submit', async (e) => {
     description: desc,
     live,
     noDb,
+    backupLevel,
     excludePaths
   });
 
@@ -1975,4 +2030,616 @@ async function loadGitDiffPreview(snapshotName) {
     }
     if (gitDiffPre) gitDiffPre.textContent = 'Error fetching git diff details.';
   }
+}
+
+// ============================================================
+//   LOCAL HEALTH & PATHS TAB
+// ============================================================
+
+let localHealthPollInterval = null;
+
+function startLocalHealthPolling() {
+  stopLocalHealthPolling();
+  loadLocalHealth(); // run immediately
+  localHealthPollInterval = setInterval(loadLocalHealth, 6000);
+}
+
+function stopLocalHealthPolling() {
+  if (localHealthPollInterval) {
+    clearInterval(localHealthPollInterval);
+    localHealthPollInterval = null;
+  }
+}
+
+async function loadLocalHealth() {
+  if (!currentProject) return;
+
+  try {
+    const response = await fetch(`/api/local-health?project=${currentProject}`);
+    if (!response.ok) throw new Error('API Error');
+    const data = await response.json();
+    renderLocalContainers(data.containers);
+    renderLocalDbConnectivity(data.diagnostics.dbConnectivity);
+    renderLocalHttpConnectivity(data.diagnostics.httpConnectivity);
+    renderLocalDiagnostics(data.diagnostics, data.network);
+    renderLocalPaths(data.network);
+    renderLocalBackups(data.backups);
+  } catch (err) {
+    const grid = document.getElementById('local-containers-grid');
+    if (grid) {
+      grid.innerHTML = `<div class="alert-box alert-danger" style="grid-column:1/-1">
+        Failed to load local health data. Is the server running?
+      </div>`;
+    }
+  }
+}
+
+// --- Containers Grid ---
+function renderLocalContainers(containers) {
+  const grid = document.getElementById('local-containers-grid');
+  if (!grid) return;
+
+  const services = ['php', 'nginx', 'mysql', 'redis', 'edge'];
+  const icons = {
+    php:   'M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2M12 4A8 8 0 1 1 4 12A8 8 0 0 1 12 4M11 17V15H13V17H11M11 7H13V13H11Z',
+    nginx: 'M12 2L1 21H23L12 2M12 6L19.5 19H4.5L12 6M11 9V13H13V9H11M11 15V17H13V15H11Z',
+    mysql: 'M12 3C7 3 3 5.7 3 9V15C3 18.3 7 21 12 21S21 18.3 21 15V9C21 5.7 17 3 12 3M19 9C19 11.2 15.9 13 12 13S5 11.2 5 9 8.1 5 12 5 19 6.8 19 9M5 11.7C6.8 13.1 9.3 14 12 14S17.2 13.1 19 11.7V15C19 17.2 15.9 19 12 19S5 17.2 5 15V11.7Z',
+    redis: 'M21 16.5C21 17.9 17.4 19 13 19S5 17.9 5 16.5V13.7C6.8 14.6 9.8 15.2 13 15.2S19.2 14.6 21 13.7V16.5M21 11C21 12.4 17.4 13.5 13 13.5S5 12.4 5 11V8.2C6.8 9.1 9.8 9.7 13 9.7S19.2 9.1 21 8.2V11M13 4C17.4 4 21 5.1 21 6.5S17.4 9 13 9 5 7.9 5 6.5 8.6 4 13 4Z',
+    edge:  'M12 2A10 10 0 0 0 2 12A10 10 0 0 0 12 22A10 10 0 0 0 22 12A10 10 0 0 0 12 2M11 17V15H13V17H11M12 4A8 8 0 0 1 20 12H18A6 6 0 0 0 12 6V4M12 8A4 4 0 0 1 16 12H14A2 2 0 0 0 12 10V8Z'
+  };
+  const colors = {
+    php:   '#6366f1',
+    nginx: '#0ea5e9',
+    mysql: '#f59e0b',
+    redis: '#ef4444',
+    edge:  '#10b981'
+  };
+
+  grid.innerHTML = services.map(svc => {
+    const info = (containers && containers[svc]) || { status: 'missing', name: '', rawStatus: '' };
+    const isRunning = info.status === 'running';
+    const isStopped = info.status === 'stopped';
+    const dotClass = isRunning ? 'running' : isStopped ? 'stopped' : 'missing';
+    const statusLabel = isRunning ? 'Running' : isStopped ? 'Stopped' : 'Not Found';
+    const statusColor = isRunning ? '#10b981' : isStopped ? '#f43f5e' : '#64748b';
+    const borderColor = isRunning ? 'rgba(16,185,129,0.25)' : isStopped ? 'rgba(244,63,94,0.25)' : 'var(--border-subtle)';
+
+    return `
+      <div class="health-container-card" style="border-color: ${borderColor};">
+        <div class="health-card-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div style="width:32px;height:32px;border-radius:8px;background:${colors[svc]}18;border:1px solid ${colors[svc]}33;display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 24 24" width="16" height="16" style="color:${colors[svc]}">
+                <path fill="currentColor" d="${icons[svc]}"/>
+              </svg>
+            </div>
+            <span class="health-service-name">${svc}</span>
+          </div>
+          <div class="health-status-badge" style="color:${statusColor}">
+            <span class="health-status-dot ${dotClass}"></span>
+            ${statusLabel}
+          </div>
+        </div>
+        <div>
+          ${info.name ? `<div class="health-container-name">${info.name}</div>` : ''}
+          <div class="health-card-details">${info.rawStatus || 'No status available'}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// --- DB Connectivity Panel ---
+function renderLocalDbConnectivity(dbTest) {
+  const panel = document.getElementById('local-db-connectivity');
+  if (!panel) return;
+
+  const isOk = dbTest && dbTest.status === 'ok';
+  const color = isOk ? 'var(--color-teal)' : 'var(--color-danger)';
+  const icon = isOk
+    ? 'M21 7L9 19L3.5 13.5L4.91 12.09L9 16.17L19.59 5.59L21 7Z'
+    : 'M12 2C6.47 2 2 6.47 2 12S6.47 22 12 22 22 17.53 22 12 17.53 2 12 2M17 15.59L15.59 17L12 13.41L8.41 17L7 15.59L10.59 12L7 8.41L8.41 7L12 10.59L15.59 7L17 8.41L13.41 12L17 15.59Z';
+
+  panel.innerHTML = `
+    <div class="db-connectivity-info">
+      <div class="db-connectivity-icon" style="background-color: ${isOk ? 'rgba(0,210,196,0.1)' : 'rgba(244,63,94,0.1)'}; border-color: ${isOk ? 'rgba(0,210,196,0.2)' : 'rgba(244,63,94,0.2)'}; color: ${color};">
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <path fill="currentColor" d="${icon}"/>
+        </svg>
+      </div>
+      <div class="db-connectivity-text">
+        <h4>MariaDB Connection Test</h4>
+        <p>${(dbTest && dbTest.message) || 'Testing database connectivity inside MySQL container...'}</p>
+      </div>
+    </div>
+    <div class="db-connectivity-status" style="color: ${color};">
+      ${isOk ? '✓ Connected' : '✗ Failed'}
+    </div>
+  `;
+}
+
+// --- HTTP Connectivity Panel ---
+function renderLocalHttpConnectivity(httpConnectivity) {
+  const homescreenPanel = document.getElementById('local-http-homescreen');
+  const wordpressPanel = document.getElementById('local-http-wordpress');
+
+  if (homescreenPanel && httpConnectivity && httpConnectivity.homescreen) {
+    const check = httpConnectivity.homescreen;
+    const isOk = check.ok;
+    const color = isOk ? 'var(--color-teal)' : 'var(--color-danger)';
+    const icon = isOk
+      ? 'M21 7L9 19L3.5 13.5L4.91 12.09L9 16.17L19.59 5.59L21 7Z'
+      : 'M12 2C6.47 2 2 6.47 2 12S6.47 22 12 22 22 17.53 22 12 17.53 2 12 2M17 15.59L15.59 17L12 13.41L8.41 17L7 15.59L10.59 12L7 8.41L8.41 7L12 10.59L15.59 7L17 8.41L13.41 12L17 15.59Z';
+    
+    homescreenPanel.innerHTML = `
+      <div class="db-connectivity-info">
+        <div class="db-connectivity-icon" style="background-color: ${isOk ? 'rgba(0,210,196,0.1)' : 'rgba(244,63,94,0.1)'}; border-color: ${isOk ? 'rgba(0,210,196,0.2)' : 'rgba(244,63,94,0.2)'}; color: ${color};">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="${icon}"/>
+          </svg>
+        </div>
+        <div class="db-connectivity-text">
+          <h4>MyPools Homescreen</h4>
+          <p>${isOk ? `Verified OK (${check.responseTime}ms) via ${check.url}` : `<span style="color: var(--color-danger); font-weight: 500;">Failed: ${check.error || 'Connection error'}</span>`}</p>
+        </div>
+      </div>
+      <div class="db-connectivity-status" style="color: ${color}; white-space: nowrap;">
+        ${isOk ? '✓ Active' : '✗ Broken'}
+      </div>
+    `;
+  }
+
+  if (wordpressPanel && httpConnectivity && httpConnectivity.wordpress) {
+    const check = httpConnectivity.wordpress;
+    const isOk = check.ok;
+    const color = isOk ? 'var(--color-teal)' : 'var(--color-danger)';
+    const icon = isOk
+      ? 'M21 7L9 19L3.5 13.5L4.91 12.09L9 16.17L19.59 5.59L21 7Z'
+      : 'M12 2C6.47 2 2 6.47 2 12S6.47 22 12 22 22 17.53 22 12 17.53 2 12 2M17 15.59L15.59 17L12 13.41L8.41 17L7 15.59L10.59 12L7 8.41L8.41 7L12 10.59L15.59 7L17 8.41L13.41 12L17 15.59Z';
+    
+    wordpressPanel.innerHTML = `
+      <div class="db-connectivity-info">
+        <div class="db-connectivity-icon" style="background-color: ${isOk ? 'rgba(0,210,196,0.1)' : 'rgba(244,63,94,0.1)'}; border-color: ${isOk ? 'rgba(0,210,196,0.2)' : 'rgba(244,63,94,0.2)'}; color: ${color};">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="${icon}"/>
+          </svg>
+        </div>
+        <div class="db-connectivity-text">
+          <h4>WordPress Engine</h4>
+          <p>${isOk ? `Verified OK (${check.responseTime}ms) via ${check.url}` : `<span style="color: var(--color-danger); font-weight: 500;">Failed: ${check.error || 'Connection error'}</span>`}</p>
+        </div>
+      </div>
+      <div class="db-connectivity-status" style="color: ${color}; white-space: nowrap;">
+        ${isOk ? '✓ Active' : '✗ Broken'}
+      </div>
+    `;
+  }
+
+  const mediaThumbnailsPanel = document.getElementById('local-http-media-thumbnails');
+  if (mediaThumbnailsPanel && httpConnectivity && httpConnectivity.mediaThumbnails) {
+    const check = httpConnectivity.mediaThumbnails;
+    const isOk = check.ok;
+    const color = isOk ? 'var(--color-teal)' : 'var(--color-danger)';
+    const icon = isOk
+      ? 'M21 7L9 19L3.5 13.5L4.91 12.09L9 16.17L19.59 5.59L21 7Z'
+      : 'M12 2C6.47 2 2 6.47 2 12S6.47 22 12 22 22 17.53 22 12 17.53 2 12 2M17 15.59L15.59 17L12 13.41L8.41 17L7 15.59L10.59 12L7 8.41L8.41 7L12 10.59L15.59 7L17 8.41L13.41 12L17 15.59Z';
+    
+    mediaThumbnailsPanel.innerHTML = `
+      <div class="db-connectivity-info">
+        <div class="db-connectivity-icon" style="background-color: ${isOk ? 'rgba(0,210,196,0.1)' : 'rgba(244,63,94,0.1)'}; border-color: ${isOk ? 'rgba(0,210,196,0.2)' : 'rgba(244,63,94,0.2)'}; color: ${color};">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="${icon}"/>
+          </svg>
+        </div>
+        <div class="db-connectivity-text">
+          <h4>Media &amp; Thumbnails</h4>
+          <p>${isOk ? `Verified OK: ${check.message}` : `<span style="color: var(--color-danger); font-weight: 500;">Warning: ${check.message}</span>`}</p>
+        </div>
+      </div>
+      <div class="db-connectivity-status" style="color: ${color}; white-space: nowrap;">
+        ${isOk ? '✓ Active' : '✗ Warning'}
+      </div>
+    `;
+  }
+}
+
+// --- Diagnostics & Fix Cards ---
+function renderLocalDiagnostics(diagnostics, network) {
+  const container = document.getElementById('local-diagnostics-container');
+  if (!container) return;
+
+  const warnings = [];
+
+  // Check DB_HOST
+  if (diagnostics.wpConfig && diagnostics.wpConfig.dbHost === 'error') {
+    warnings.push({
+      id: 'wp-db-host',
+      title: 'Wrong DB_HOST in wp-config.local.php',
+      desc: `DB_HOST is set to <code>${diagnostics.wpConfig.dbHostVal || 'localhost'}</code> — should be <code>mysql</code> (Docker Compose service name).`,
+      fixType: 'wp-db-host',
+      fixLabel: 'Set DB_HOST → mysql'
+    });
+  }
+
+  // Check WP URLs
+  if (diagnostics.wpConfig && diagnostics.wpConfig.wpUrls === 'warning') {
+    warnings.push({
+      id: 'wp-dynamic-urls',
+      title: 'Hardcoded WP_HOME / WP_SITEURL detected',
+      desc: `Value: <code>${diagnostics.wpConfig.wpUrlsVal || '(hardcoded)'}</code>. Hardcoded URLs break mobile LAN testing. Enable dynamic host resolution.`,
+      fixType: 'wp-dynamic-urls',
+      fixLabel: 'Enable Dynamic URLs'
+    });
+  }
+
+  // Check WP Media / Thumbnails
+  if (diagnostics.httpConnectivity && diagnostics.httpConnectivity.mediaThumbnails && !diagnostics.httpConnectivity.mediaThumbnails.ok) {
+    const check = diagnostics.httpConnectivity.mediaThumbnails;
+    warnings.push({
+      id: 'wp-media-urls',
+      title: 'WordPress Media & Thumbnails Issues',
+      desc: `${check.message} This breaks image loading and thumbnails in the WordPress media library and front-end.`,
+      fixType: 'wp-media-urls',
+      fixLabel: 'Fix Media & Thumbnails'
+    });
+  }
+
+  // Check Nginx upstream
+  if (diagnostics.nginx && diagnostics.nginx.upstream === 'error') {
+    warnings.push({
+      id: 'nginx-upstream',
+      title: 'Nginx Edge Upstream Misconfigured',
+      desc: `proxy_pass is <code>${diagnostics.nginx.upstreamVal || '???'}</code> — should be <code>http://php:80</code> to route through Compose service.`,
+      fixType: 'nginx-upstream',
+      fixLabel: 'Fix Upstream → http://php:80'
+    });
+  }
+
+  // Check Nginx Host Header
+  if (diagnostics.nginx && diagnostics.nginx.hostHeader === 'error') {
+    warnings.push({
+      id: 'nginx-host-header',
+      title: 'Missing proxy_set_header Host in Nginx Edge',
+      desc: 'Without <code>proxy_set_header Host $http_host;</code> WordPress redirects go to the wrong origin and mobile testing breaks.',
+      fixType: 'nginx-host-header',
+      fixLabel: 'Add Host Header Fix'
+    });
+  }
+
+  // No warnings = all clean
+  if (warnings.length === 0) {
+    container.innerHTML = `
+      <div class="alert-box alert-success">
+        <strong>✓ All diagnostics passed.</strong> DB_HOST, Nginx upstream, host header, and WP URLs all look correct.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = warnings.map(w => `
+    <div class="diag-warning-card" id="diag-card-${w.id}">
+      <div class="diag-warning-left">
+        <div class="diag-warning-icon">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M12,2L1,21H23M12,6L19.5,19H4.5M11,10V14H13V10M11,16V18H13V16"/>
+          </svg>
+        </div>
+        <div class="diag-warning-content">
+          <h4>${w.title}</h4>
+          <p>${w.desc}</p>
+        </div>
+      </div>
+      <button class="btn btn-secondary diag-fix-btn" 
+              data-fix-type="${w.fixType}" 
+              data-diag-id="${w.id}"
+              style="white-space:nowrap; flex-shrink:0;">
+        <svg viewBox="0 0 24 24" width="14" height="14">
+          <path fill="currentColor" d="M13.78 15.3L19.78 21.3L21.89 19.14L15.89 13.14L13.78 15.3M17.5 11.5C18 11.5 18.5 11.4 18.94 11.25L15.41 7.72C15.25 8.16 15.15 8.62 15.15 9.11C15.15 10.5 16.06 11.5 17.5 11.5M5.7 10.13L7.12 8.71L11.39 13L12.81 11.58L8.54 7.31L9.96 5.89L13.13 9.06L14.55 7.64L11.39 4.47C10.81 3.9 9.9 3.9 9.32 4.47L4.29 9.51C3.71 10.08 3.71 11 4.29 11.58L8.54 15.84L9.96 14.41L5.7 10.13Z"/>
+        </svg>
+        ${w.fixLabel}
+      </button>
+    </div>
+  `).join('');
+
+  // Bind fix button click handlers
+  container.querySelectorAll('.diag-fix-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const fixType = btn.getAttribute('data-fix-type');
+      const diagId = btn.getAttribute('data-diag-id');
+      await applyLocalHealthFix(fixType, diagId, btn);
+    });
+  });
+}
+
+async function applyLocalHealthFix(fixType, diagId, btn) {
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;margin:0;"></div> Applying...';
+
+  try {
+    const res = await fetch('/api/local-health/fix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: currentProject, type: fixType })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message || 'Fix applied successfully.', 'success');
+      // Refresh health data after fix
+      await loadLocalHealth();
+    } else {
+      showToast(data.error || 'Fix failed.', 'error');
+      btn.disabled = false;
+      btn.innerHTML = originalHTML;
+    }
+  } catch (err) {
+    showToast('Request failed: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = originalHTML;
+  }
+}
+
+// --- Paths Grid ---
+function renderLocalPaths(network) {
+  const grid = document.getElementById('local-paths-grid');
+  if (!grid || !network) return;
+
+  const { httpPort = '9080', edgePort = '8443', lanIp = '(unknown)', paths } = network;
+  const p = paths || {};
+
+  const pathCards = [
+    {
+      title: 'Host Direct HTTP',
+      badge: 'HTTP · Direct',
+      badgeClass: 'path-badge-direct',
+      url: p.directHttp || `http://127.0.0.1:${httpPort}/wp-admin/`,
+      urls: [
+        { label: 'WP Admin', url: p.directHttp || `http://127.0.0.1:${httpPort}/wp-admin/` },
+        { label: 'Home', url: `http://127.0.0.1:${httpPort}/` },
+        { label: 'Splash', url: `http://127.0.0.1:${httpPort}/splash/` }
+      ],
+      note: 'Plain HTTP via Podman port mapping. No TLS.'
+    },
+    {
+      title: 'Host HTTPS Edge',
+      badge: 'HTTPS · TLS Edge',
+      badgeClass: 'path-badge-edge',
+      url: p.edgeHttps || `https://127.0.0.1:${edgePort}/wp-admin/`,
+      urls: [
+        { label: 'WP Admin', url: p.edgeHttps || `https://127.0.0.1:${edgePort}/wp-admin/` },
+        { label: 'Home', url: `https://127.0.0.1:${edgePort}/` },
+        { label: 'Login', url: `https://127.0.0.1:${edgePort}/wp-login.php` }
+      ],
+      note: 'HTTPS via local TLS edge. Matches wp-config WP_HOME.'
+    },
+    {
+      title: 'Mobile LAN HTTP',
+      badge: 'LAN · Mobile Test',
+      badgeClass: 'path-badge-lan',
+      url: p.lanHttp || `http://${lanIp}:${httpPort}/splash/`,
+      urls: [
+        { label: 'Splash', url: p.lanHttp || `http://${lanIp}:${httpPort}/splash/` },
+        { label: 'Home', url: `http://${lanIp}:${httpPort}/` },
+        { label: 'WP Admin', url: `http://${lanIp}:${httpPort}/wp-admin/` }
+      ],
+      note: `Your LAN IP: ${lanIp}. Use on any device on same WiFi.`
+    },
+    {
+      title: 'Mobile LAN HTTPS',
+      badge: 'LAN · TLS Edge',
+      badgeClass: 'path-badge-lan',
+      url: p.lanHttps || `https://${lanIp}:${edgePort}/splash/`,
+      urls: [
+        { label: 'Splash', url: p.lanHttps || `https://${lanIp}:${edgePort}/splash/` },
+        { label: 'Home', url: `https://${lanIp}:${edgePort}/` },
+        { label: 'WP Admin', url: `https://${lanIp}:${edgePort}/wp-admin/` }
+      ],
+      note: `HTTPS via edge TLS. Browser may warn about self-signed cert.`
+    }
+  ];
+
+  grid.innerHTML = pathCards.map(card => `
+    <div class="card path-card">
+      <div class="path-card-header">
+        <span class="path-card-title">${card.title}</span>
+        <span class="path-card-badge ${card.badgeClass}">${card.badge}</span>
+      </div>
+      <p style="font-size:12px; color:var(--text-desc); margin: 0;">${card.note}</p>
+      ${card.urls.map(u => `
+        <div class="path-card-url-box">
+          <a href="${u.url}" target="_blank" rel="noopener noreferrer" class="path-card-url" title="${u.url}" style="text-decoration:none; color:inherit; flex:1;">
+            ${u.url}
+          </a>
+          <button class="btn-text-primary" style="padding:3px 6px; font-size:11px; flex-shrink:0;" 
+                  onclick="navigator.clipboard.writeText('${u.url}').then(()=>showToast('Copied!','success')).catch(()=>{})" 
+                  title="Copy URL">
+            <svg viewBox="0 0 24 24" width="13" height="13">
+              <path fill="currentColor" d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3M19 19H5V5H19V19M9 7H7V9H9V7M9 11H7V13H9V11M9 15H7V17H9V15M17 7H11V9H17V7M17 11H11V13H17V11M17 15H11V17H17V15Z"/>
+            </svg>
+          </button>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+// --- Config Backup History ---
+function renderLocalBackups(backups) {
+  const container = document.getElementById('local-backups-container');
+  if (!container) return;
+
+  if (!backups || backups.length === 0) {
+    container.innerHTML = `
+      <div class="alert-box alert-info">
+        <strong>No backups yet.</strong> Config files are watched automatically. Backups appear here when files change.
+      </div>
+    `;
+    return;
+  }
+
+  // Group backups by file identity (prefix before timestamp)
+  const grouped = {};
+  backups.forEach(b => {
+    // filename pattern: fileId_timestamp.bak
+    const parts = b.filename.split('_');
+    // The timestamp is the last numeric-like segment before .bak
+    const tsIdx = parts.findLastIndex(p => /^\d{4}/.test(p));
+    const fileKey = tsIdx >= 0 ? parts.slice(0, tsIdx).join('_') : b.filename;
+    if (!grouped[fileKey]) grouped[fileKey] = [];
+    grouped[fileKey].push(b);
+  });
+
+  const allItems = backups.slice(0, 30); // Show last 30 backups across all files
+
+  container.innerHTML = allItems.map((backup, idx) => {
+    const dt = new Date(backup.mtime);
+    const relTime = getRelativeTime(backup.mtime);
+    const absTime = dt.toLocaleString();
+    const sizeKb = (backup.size / 1024).toFixed(1);
+
+    // Derive the original file path from filename
+    const friendlyName = backup.filename
+      .replace(/^secrets_/, 'secrets/')
+      .replace(/^nginx_edge_conf\.d_/, 'nginx/edge/conf.d/')
+      .replace(/^nginx_conf\.d_/, 'nginx/conf.d/')
+      .replace(/_\d{8}_\d{6}\.bak$/, '')
+      .replace(/_/g, '/');
+
+    return `
+      <div class="backup-timeline-item" id="backup-item-${idx}">
+        <div class="backup-item-header">
+          <div class="backup-item-info">
+            <div class="backup-icon-wrapper">
+              <svg viewBox="0 0 24 24" width="16" height="16">
+                <path fill="currentColor" d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2M18 20H6V4H13V9H18V20M10 13H12V17H10V13M10 9H12V11H10V9Z"/>
+              </svg>
+            </div>
+            <div class="backup-meta">
+              <h5>${friendlyName}</h5>
+              <p>
+                <span title="${absTime}">${relTime}</span>
+                <span>· ${absTime}</span>
+                <span>· ${sizeKb} KB</span>
+              </p>
+            </div>
+          </div>
+          <div class="backup-item-actions">
+            <button class="btn btn-secondary" style="padding:6px 10px; font-size:12px;"
+                    onclick="toggleBackupDiff(${idx}, '${backup.filename}')" 
+                    title="Preview file contents">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M12 4.5C7 4.5 2.7 7.6 1 12C2.7 16.4 7 19.5 12 19.5S21.3 16.4 23 12C21.3 7.6 17 4.5 12 4.5M12 17C9.2 17 7 14.8 7 12S9.2 7 12 7 17 9.2 17 12 14.8 17 12 17M12 9C10.3 9 9 10.3 9 12S10.3 15 12 15 15 13.7 15 12 13.7 9 12 9Z"/>
+              </svg>
+              Preview
+            </button>
+            <button class="btn btn-danger" style="padding:6px 10px; font-size:12px;"
+                    onclick="restoreLocalBackup('${backup.filename}')"
+                    title="Restore this config backup to its original location">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M12 5V1L7 6L12 11V7C15.3 7 18 9.7 18 13S15.3 19 12 19 6 16.3 6 13H4C4 17.4 7.6 21 12 21S20 17.4 20 13 16.4 5 12 5Z"/>
+              </svg>
+              Restore
+            </button>
+          </div>
+        </div>
+        <div class="diff-preview-box" id="diff-preview-${idx}" style="display:none;">
+          <pre style="color:var(--text-muted); font-size:11px;">Loading preview...</pre>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function toggleBackupDiff(idx, filename) {
+  const previewBox = document.getElementById(`diff-preview-${idx}`);
+  if (!previewBox) return;
+
+  if (previewBox.style.display !== 'none') {
+    previewBox.style.display = 'none';
+    return;
+  }
+
+  previewBox.style.display = 'block';
+  previewBox.innerHTML = '<pre style="color:var(--text-muted); font-size:11px;">Loading preview...</pre>';
+
+  try {
+    const res = await fetch(`/api/local-health/backups?project=${currentProject}&filename=${encodeURIComponent(filename)}`);
+    if (!res.ok) throw new Error('Failed to fetch backup');
+    const data = await res.json();
+    previewBox.innerHTML = `<pre>${escapeHtml(data.content || '(empty file)')}</pre>`;
+  } catch (err) {
+    previewBox.innerHTML = `<pre style="color:var(--color-danger);">Error loading backup: ${err.message}</pre>`;
+  }
+}
+
+async function restoreLocalBackup(filename) {
+  if (!confirm(`Restore "${filename}" to its original path? This will overwrite the current file.`)) return;
+
+  try {
+    const res = await fetch('/api/local-health/backups/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: currentProject, filename })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message || 'File restored successfully.', 'success');
+      await loadLocalHealth();
+    } else {
+      showToast(data.error || 'Restore failed.', 'error');
+    }
+  } catch (err) {
+    showToast('Request failed: ' + err.message, 'error');
+  }
+}
+
+// --- Restart Stack Button ---
+document.addEventListener('DOMContentLoaded', () => {
+  const restartBtn = document.getElementById('local-restart-stack-btn');
+  if (restartBtn) {
+    restartBtn.addEventListener('click', async () => {
+      if (!currentProject) {
+        showToast('No project selected.', 'warning');
+        return;
+      }
+      if (!confirm('This will run podman compose down + up for the current project. Continue?')) return;
+
+      restartBtn.disabled = true;
+      restartBtn.innerHTML = '<div class="spinner" style="width:14px;height:14px;margin:0 8px 0 0;"></div> Restarting...';
+
+      try {
+        const res = await fetch('/api/local-health/fix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: currentProject, type: 'restart-stack' })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Stack restarted successfully.', 'success');
+        } else {
+          showToast(data.error || 'Restart failed.', 'error');
+        }
+      } catch (err) {
+        showToast('Request failed: ' + err.message, 'error');
+      } finally {
+        restartBtn.disabled = false;
+        restartBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path fill="currentColor" d="M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12H4A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z"/>
+          </svg>
+          Restart Compose Stack
+        `;
+      }
+    });
+  }
+});
+
+// Helper: escape HTML for preview
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
