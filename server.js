@@ -1415,13 +1415,19 @@ const server = http.createServer((req, res) => {
           return { status, filePath };
         });
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          branch: branchName,
-          files: files,
-          modifiedCount: files.filter(f => f.status === 'M' || f.status === 'MM').length,
-          untrackedCount: files.filter(f => f.status === '??').length
-        }));
+        // Also get total tracked files count
+        exec('git -C ' + gitRepoPath + ' ls-files', (lsFilesErr, lsFilesStdout) => {
+          const totalTrackedFiles = lsFilesErr ? 0 : (lsFilesStdout || '').trim().split('\n').filter(Boolean).length;
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            branch: branchName,
+            files: files,
+            modifiedCount: files.filter(f => f.status === 'M' || f.status === 'MM').length,
+            untrackedCount: files.filter(f => f.status === '??').length,
+            totalTrackedFiles: totalTrackedFiles
+          }));
+        });
       });
     });
     return;
@@ -1589,6 +1595,170 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // GET /api/git/versions
+  if (pathname === '/api/git/versions' && method === 'GET') {
+    const project = parsedUrl.query.project || 'mypools';
+    const localRepo = getProjectPath(project);
+    if (!localRepo || !fs.existsSync(localRepo)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Project local repository not found' }));
+      return;
+    }
+
+    const settingsPath = path.join(localRepo, '.local', 'settings.json');
+    const secretPath = path.join(localRepo, '.local', 'ssh.secret.txt');
+
+    let settings = {
+      sshHost: '152.42.220.5',
+      sshUser: 'root',
+      sshPassword: '',
+      sshHostKey: 'SHA256:ZJmY20MEfjIPQ9I3uWA4Thql8y70nQxjY6za9LMiDBg',
+      gitRepo: localRepo,
+      gitBranch: 'main',
+      vpsInstallRoot: `/opt/${project.toLowerCase()}`
+    };
+
+    if (fs.existsSync(secretPath)) {
+      try {
+        settings.sshPassword = fs.readFileSync(secretPath, 'utf8').trim();
+      } catch (e) {}
+    }
+
+    if (fs.existsSync(settingsPath)) {
+      try {
+        const fileData = fs.readFileSync(settingsPath, 'utf8');
+        const parsed = JSON.parse(fileData);
+        settings = { ...settings, ...parsed };
+      } catch (e) {}
+    }
+
+    const branchName = settings.gitBranch || 'main';
+    const vpsInstallRoot = settings.vpsInstallRoot || `/opt/${project.toLowerCase()}`;
+
+    // Helper for SSH
+    const runSsh = (cmd) => {
+      return new Promise((resolve) => {
+        const plinkTool = fs.existsSync(path.join(localRepo, 'tools', 'plink.exe')) 
+          ? path.join(localRepo, 'tools', 'plink.exe') 
+          : (fs.existsSync(path.join(SNAPSHOTS_ROOT, 'tools', 'plink.exe')) ? path.join(SNAPSHOTS_ROOT, 'tools', 'plink.exe') : 'plink.exe');
+        const escapedCmd = cmd.replace(/"/g, '\\"');
+        const plinkCmd = `"${plinkTool}" -ssh ${settings.sshUser}@${settings.sshHost} -batch -hostkey "${settings.sshHostKey}" -pw "${settings.sshPassword}" "${escapedCmd}"`;
+        
+        exec(plinkCmd, { timeout: 8000 }, (error, stdout) => {
+          if (error) {
+            resolve('');
+          } else {
+            resolve(stdout.trim());
+          }
+        });
+      });
+    };
+
+    // Gather local branch, local commit, remote commit, server commit
+    Promise.all([
+      // 1. Get Local Commit
+      new Promise((resolve) => {
+        exec(`git -C "${localRepo}" rev-parse HEAD`, (err, stdout) => {
+          resolve(err ? '' : stdout.trim());
+        });
+      }),
+      // 2. Get Remote Commit
+      new Promise((resolve) => {
+        exec(`git -C "${localRepo}" ls-remote origin ${branchName}`, (err, stdout) => {
+          if (err || !stdout) {
+            resolve('');
+          } else {
+            const parts = stdout.trim().split(/\s+/);
+            resolve(parts[0] || '');
+          }
+        });
+      }),
+      // 3. Get Server Commit
+      runSsh(`cat ${vpsInstallRoot}/deploy-status.json 2>/dev/null || git -C ${vpsInstallRoot} log -1 --format=%H`)
+    ]).then(([localCommit, remoteCommit, vpsCommitRaw]) => {
+      let serverCommit = vpsCommitRaw;
+      if (serverCommit) {
+        serverCommit = serverCommit.trim();
+        try {
+          const parsed = JSON.parse(serverCommit);
+          if (parsed && parsed.commit) {
+            serverCommit = parsed.commit.trim();
+          }
+        } catch (e) {
+          const match = serverCommit.match(/commit:([a-f0-9]+)/i);
+          if (match && match[1]) {
+            serverCommit = match[1];
+          } else {
+            serverCommit = serverCommit.trim();
+          }
+        }
+      }
+
+      const localShort = localCommit ? localCommit.substring(0, 7) : '';
+      const remoteShort = remoteCommit ? remoteCommit.substring(0, 7) : '';
+      const serverShort = serverCommit ? serverCommit.substring(0, 7) : '';
+
+      const parity = (localCommit && remoteCommit && serverCommit && localCommit === remoteCommit && localCommit === serverCommit) ? true : false;
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        local: localCommit,
+        localShort,
+        remote: remoteCommit,
+        remoteShort,
+        server: serverCommit,
+        serverShort,
+        parity
+      }));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    });
+    return;
+  }
+
+  // POST /api/git/push
+  if (pathname === '/api/git/push' && method === 'POST') {
+    if (activeTask.status === 'running') {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Another task is currently running' }));
+      return;
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const { commitMessage, project } = payload;
+
+        const activeProject = project || 'mypools';
+        const projectPath = getProjectPath(activeProject);
+        if (!projectPath) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Project path not found' }));
+          return;
+        }
+
+        const args = [];
+        if (commitMessage) {
+          args.push('-CommitMessage', commitMessage);
+        }
+        args.push('-SourcePath', projectPath);
+        args.push('-GitOnly');
+
+        runPowerShellScript('Deploy-Git.ps1', args);
+
+        res.writeHead(202, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'running', message: 'Git push task started' }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Malformed JSON payload' }));
+      }
+    });
+    return;
+  }
+
   // 5bb. GET /api/parity/check
   if (pathname === '/api/parity/check' && method === 'GET') {
     const project = parsedUrl.query.project || 'mypools';
@@ -1733,13 +1903,15 @@ const server = http.createServer((req, res) => {
         )
       ])
     ]).then(([localCommit, vpsCommitRaw, localContainers, vpsContainers, ssl, vpsMetrics, endpoints]) => {
-      // Parse vpsCommit
       let vpsCommit = vpsCommitRaw.trim();
-      if (vpsCommit.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(vpsCommit);
-          vpsCommit = parsed.commit || vpsCommit;
-        } catch (e) {}
+      try {
+        const parsed = JSON.parse(vpsCommit);
+        vpsCommit = parsed.commit || vpsCommit;
+      } catch (e) {
+        const match = vpsCommit.match(/commit:([a-f0-9]+)/i);
+        if (match && match[1]) {
+          vpsCommit = match[1];
+        }
       }
 
       // Parse container lists
@@ -2321,11 +2493,14 @@ const server = http.createServer((req, res) => {
 
     runSsh(`cat ${vpsInstallRoot}/deploy-status.json 2>/dev/null || git -C ${vpsInstallRoot} log -1 --format=%H`).then(vpsCommitRaw => {
       let vpsCommit = vpsCommitRaw.trim();
-      if (vpsCommit.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(vpsCommit);
-          vpsCommit = parsed.commit || vpsCommit;
-        } catch (e) {}
+      try {
+        const parsed = JSON.parse(vpsCommit);
+        vpsCommit = parsed.commit || vpsCommit;
+      } catch (e) {
+        const match = vpsCommit.match(/commit:([a-f0-9]+)/i);
+        if (match && match[1]) {
+          vpsCommit = match[1];
+        }
       }
 
       if (!vpsCommit || !/^[a-f0-9]+$/i.test(vpsCommit)) {

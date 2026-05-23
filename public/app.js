@@ -675,7 +675,7 @@ async function loadGitStatus() {
     if (gitUntrackedCount) gitUntrackedCount.textContent = data.untrackedCount || '0';
 
     const totalChanged = (data.modifiedCount || 0) + (data.untrackedCount || 0);
-    const totalFiles = (data.files && data.files.length) || 0;
+    const totalFiles = data.totalTrackedFiles || (data.files && data.files.length) || 0;
 
     // Update file progress bar
     if (gitFileProgressContainer && totalFiles > 0) {
