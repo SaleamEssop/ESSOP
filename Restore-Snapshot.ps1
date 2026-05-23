@@ -23,20 +23,73 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SnapshotsRoot = "C:\snapshots"
-$projectSnapshotDir = Join-Path $SnapshotsRoot $Project
+
+# ── Resolve project source path ────────────────────────────
+function Get-ProjectSourcePath {
+    param([string]$Proj)
+
+    if ($SourcePath -and (Test-Path $SourcePath)) {
+        return (Resolve-Path $SourcePath).Path
+    }
+
+    # Try loading from projects.json first
+    $projectsJsonPath = Join-Path $PSScriptRoot "projects.json"
+    if (Test-Path $projectsJsonPath) {
+        try {
+            $projs = Get-Content $projectsJsonPath -Raw | ConvertFrom-Json
+            $found = $projs | Where-Object { $_.name -eq $Proj } | Select-Object -First 1
+            if ($found -and $found.path -and (Test-Path $found.path)) {
+                return (Resolve-Path $found.path).Path
+            }
+        } catch {
+            Write-Warning "Failed to parse projects.json: $_"
+        }
+    }
+
+    $known = @{
+        "mypools"        = "C:\Podman\MyPools"
+        "ESSOP"          = "C:\ESSOP"
+        "snapshots"      = "C:\snapshots"
+        "mycities"       = "C:\Docker\projects\mycities"
+        "deepseek-tunnel" = "C:\Podman\ngrok"
+    }
+
+    if ($known.ContainsKey($Proj)) {
+        $p = $known[$Proj]
+        if (Test-Path $p) { return (Resolve-Path $p).Path }
+    }
+
+    throw "Cannot resolve source path for project '$Proj'. Use -SourcePath to specify."
+}
+
+$Source = Get-ProjectSourcePath -Proj $Project
+$projectSnapshotDir = Join-Path $Source ".snapshots"
 
 if (-not $SnapshotName) {
     $activeFile = Join-Path $projectSnapshotDir "active.txt"
     if (-not (Test-Path $activeFile)) {
-        throw "No active.txt and no -SnapshotName specified."
+        # Fallback to legacy active.txt
+        $legacyActiveFile = Join-Path "C:\snapshots\$Project" "active.txt"
+        if (Test-Path $legacyActiveFile) {
+            $activeFile = $legacyActiveFile
+        } else {
+            throw "No active.txt and no -SnapshotName specified."
+        }
     }
     $SnapshotName = (Get-Content $activeFile -Raw).Trim()
     Write-Host "Using latest: $SnapshotName" -ForegroundColor Cyan
 }
 
 $snapshotDir = Join-Path $projectSnapshotDir $SnapshotName
-if (-not (Test-Path $snapshotDir)) { throw "Snapshot not found: $snapshotDir" }
+if (-not (Test-Path $snapshotDir)) {
+    # Fallback to legacy path C:\snapshots\<Project>\<SnapshotName>
+    $legacyDir = Join-Path "C:\snapshots\$Project" $SnapshotName
+    if (Test-Path $legacyDir) {
+        $snapshotDir = $legacyDir
+    } else {
+        throw "Snapshot not found: $snapshotDir"
+    }
+}
 
 $snapshotJson = Join-Path $snapshotDir "snapshot.json"
 if (-not (Test-Path $snapshotJson)) { throw "Not a valid snapshot: missing snapshot.json" }
@@ -49,11 +102,20 @@ Write-Host "Level     : $level" -ForegroundColor Yellow
 Write-Host "Description: $($meta.description)" -ForegroundColor White
 Write-Host "Created   : $($meta.timestamp)" -ForegroundColor White
 
-$Source = if ($SourcePath) { $SourcePath } else { $meta.source_path }
-if (-not $Source) { throw "Cannot determine source path." }
 $composeProject = $meta.compose_project
 $composeFile = Join-Path $Source "compose.yml"
 $envFilePath = if (Test-Path (Join-Path $Source ".env.local")) { Join-Path $Source ".env.local" } else { Join-Path $Source ".env" }
+
+$envVars = @{}
+if ($envFilePath -and (Test-Path $envFilePath)) {
+    Get-Content $envFilePath | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -eq '' -or $line.StartsWith('#')) { return }
+        if ($line -match '^([^=]+)=(.*)$') {
+            $envVars[$matches[1].Trim()] = $matches[2].Trim().Trim('"').Trim("'")
+        }
+    }
+}
 
 Write-Host "Target    : $Source" -ForegroundColor White
 
@@ -71,7 +133,7 @@ if ($pc) { $env:PODMAN_COMPOSE_PROVIDER = $pc.Source }
 
 if (-not $SkipPreBackup -and (Test-Path $Source)) {
     Write-Host "`nCreating pre-restore safety snapshot..." -ForegroundColor Cyan
-    $createScript = Join-Path $SnapshotsRoot "Create-Snapshot.ps1"
+    $createScript = Join-Path $PSScriptRoot "Create-Snapshot.ps1"
     if (Test-Path $createScript) {
         & $createScript -Project $Project -Description "PRE-RESTORE safety backup before restoring $SnapshotName" -SourcePath $Source -Live -NoDatabase
     }
@@ -118,16 +180,7 @@ if (Test-Path $sqlFile) {
         Start-Sleep -Seconds 2
     }
 
-    $envVars = @{}
-    if ($envFilePath -and (Test-Path $envFilePath)) {
-        Get-Content $envFilePath | ForEach-Object {
-            $line = $_.Trim()
-            if ($line -eq '' -or $line.StartsWith('#')) { return }
-            if ($line -match '^([^=]+)=(.*)$') {
-                $envVars[$matches[1].Trim()] = $matches[2].Trim().Trim('"').Trim("'")
-            }
-        }
-    }
+    # envVars already parsed at top
     $dbPass = if ($envVars['MYSQL_ROOT_PASSWORD']) { $envVars['MYSQL_ROOT_PASSWORD'] } else { "" }
     $dbName = if ($envVars['MYSQL_DATABASE']) { $envVars['MYSQL_DATABASE'] } else { $Project }
 

@@ -45,15 +45,31 @@ function Get-ProjectSourcePath {
         return (Resolve-Path $SourcePath).Path
     }
 
+    # Try loading from projects.json first
+    $projectsJsonPath = Join-Path $PSScriptRoot "projects.json"
+    if (Test-Path $projectsJsonPath) {
+        try {
+            $projs = Get-Content $projectsJsonPath -Raw | ConvertFrom-Json
+            $found = $projs | Where-Object { $_.name -eq $Proj } | Select-Object -First 1
+            if ($found -and $found.path -and (Test-Path $found.path)) {
+                return (Resolve-Path $found.path).Path
+            }
+        } catch {
+            Write-Warning "Failed to parse projects.json: $_"
+        }
+    }
+
     $known = @{
         "mypools"        = "C:\Podman\MyPools"
+        "ESSOP"          = "C:\ESSOP"
+        "snapshots"      = "C:\snapshots"
         "mycities"       = "C:\Docker\projects\mycities"
         "deepseek-tunnel" = "C:\Podman\ngrok"
     }
 
     if ($known.ContainsKey($Proj)) {
         $p = $known[$Proj]
-        if (Test-Path $p) { return $p }
+        if (Test-Path $p) { return (Resolve-Path $p).Path }
     }
 
     throw "Cannot resolve source path for project '$Proj'. Use -SourcePath to specify."
@@ -116,8 +132,13 @@ $composeFile = Join-Path $Source "compose.yml"
 if (-not (Test-Path $composeFile)) { throw "compose.yml not found at $composeFile" }
 $envFilePath = if (Test-Path (Join-Path $Source ".env.local")) { Join-Path $Source ".env.local" } else { Join-Path $Source ".env" }
 
+$ProjectSnapshotsRoot = Join-Path $Source ".snapshots"
+if (-not (Test-Path $ProjectSnapshotsRoot)) {
+    New-Item -ItemType Directory -Path $ProjectSnapshotsRoot -Force | Out-Null
+}
+
 $timestamp = Get-Date -Format "yyyy-MM-dd-HHmm"
-$snapshotDir = Join-Path $SnapshotsRoot "$Project\$timestamp"
+$snapshotDir = Join-Path $ProjectSnapshotsRoot $timestamp
 if (Test-Path $snapshotDir) {
     Remove-Item -Path $snapshotDir -Recurse -Force -ErrorAction SilentlyContinue
 }
@@ -430,12 +451,12 @@ if ($wasStopped) {
 }
 
 # ── Step 6: Update active.txt ───────────────────────────────
-$activeFile = Join-Path $SnapshotsRoot "$Project\active.txt"
+$activeFile = Join-Path $ProjectSnapshotsRoot "active.txt"
 $timestamp | Out-File -FilePath $activeFile -Encoding UTF8 -NoNewline
 
 # ── Step 8: Enforce snapshot retention limit ────────────────
 Write-Host "`nEnforcing $RetentionCount-snapshot retention limit..." -ForegroundColor Cyan
-$projectDir = Join-Path $SnapshotsRoot $Project
+$projectDir = $ProjectSnapshotsRoot
 if (Test-Path $projectDir) {
     $snapshots = Get-ChildItem -Path $projectDir -Directory | Where-Object {
         Test-Path (Join-Path $_.FullName "snapshot.json")
@@ -454,7 +475,7 @@ if (Test-Path $projectDir) {
 }
 
 # ── Step 7: Refresh registry ─────────────────────────────────
-$refreshScript = Join-Path $SnapshotsRoot "Refresh-Registry.ps1"
+$refreshScript = Join-Path $PSScriptRoot "Refresh-Registry.ps1"
 if (Test-Path $refreshScript) {
     & $refreshScript
 }

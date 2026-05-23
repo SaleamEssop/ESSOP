@@ -6,49 +6,56 @@
 #>
 
 $SnapshotsRoot = "C:\snapshots"
-$ProjectsFile = Join-Path $SnapshotsRoot "projects.json"
-
+$projectsJsonPath = Join-Path $SnapshotsRoot "projects.json"
 $projectsList = @()
-if (Test-Path $ProjectsFile) {
+
+if (Test-Path $projectsJsonPath) {
     try {
-        $raw = Get-Content $ProjectsFile -Raw | ConvertFrom-Json
-        if ($raw -is [Array]) {
-            $projectsList = $raw
-        } elseif ($raw -ne $null) {
-            $projectsList = @($raw)
+        $projsObj = Get-Content $projectsJsonPath -Raw | ConvertFrom-Json
+        foreach ($p in $projsObj) {
+            if ($p.name -and $p.path -and (Test-Path $p.path)) {
+                $projectsList += [PSCustomObject]@{
+                    Name = $p.name
+                    Path = (Resolve-Path $p.path).Path
+                }
+            }
         }
     } catch {
-        Write-Warning "Failed to parse projects.json. Falling back to directory scan."
+        Write-Warning "Failed to parse projects.json in Refresh-Registry: $_"
     }
 }
 
-if ($projectsList.Count -eq 0) {
-    # Legacy fallback: Scan subdirectories under C:\snapshots
-    $projectsList = @(Get-ChildItem -Path $SnapshotsRoot -Directory -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -notmatch '^(templates|_archive|public|tools)$'
-    } | ForEach-Object {
-        [PSCustomObject]@{
-            name = $_.Name
-            path = $_.FullName
+# Fallback projects list
+$fallbackProjects = @{
+    "mypools"   = "C:\Podman\MyPools"
+    "ESSOP"     = "C:\ESSOP"
+    "snapshots" = "C:\snapshots"
+}
+
+foreach ($key in $fallbackProjects.Keys) {
+    if (-not ($projectsList | Where-Object { $_.Name -eq $key })) {
+        $pPath = $fallbackProjects[$key]
+        if (Test-Path $pPath) {
+            $projectsList += [PSCustomObject]@{
+                Name = $key
+                Path = (Resolve-Path $pPath).Path
+            }
         }
-    })
+    }
 }
 
 $registry = @{}
 foreach ($proj in $projectsList) {
-    $projName = $proj.name
-    $projPath = $proj.path
+    $projName = $proj.Name
+    $projPath = $proj.Path
 
-    # Try local .snapshots folder first
     $snapsPath = Join-Path $projPath ".snapshots"
-    if (-not (Test-Path $snapsPath)) {
-        # Fallback to C:\snapshots\<ProjectName>
-        $snapsPath = Join-Path $SnapshotsRoot $projName
+    $snapshots = @()
+    if (Test-Path $snapsPath) {
+        $snapshots = @(Get-ChildItem -Path $snapsPath -Directory -ErrorAction SilentlyContinue | Where-Object {
+            Test-Path (Join-Path $_.FullName "snapshot.json")
+        } | Sort-Object Name -Descending)
     }
-
-    $snapshots = @(Get-ChildItem -Path $snapsPath -Directory -ErrorAction SilentlyContinue | Where-Object {
-        Test-Path (Join-Path $_.FullName "snapshot.json")
-    } | Sort-Object Name -Descending)
 
     $projData = @{
         name = $projName
@@ -60,9 +67,9 @@ foreach ($proj in $projectsList) {
         $jsonPath = Join-Path $snap.FullName "snapshot.json"
         try {
             $meta = Get-Content $jsonPath -Raw | ConvertFrom-Json
-            $sourcePathVal = if ($meta.source_path) { $meta.source_path } else { $projPath }
-            $projData.source_path = $sourcePathVal
-            
+            if ($meta.source_path) {
+                $projData.source_path = $meta.source_path
+            }
             $hasDb = Test-Path (Join-Path $snap.FullName "database.sql")
             $hasZip = Test-Path (Join-Path $snap.FullName "project.zip")
             
@@ -76,7 +83,8 @@ foreach ($proj in $projectsList) {
                 powered_off = $meta.powered_off_snapshot
                 git_commit = $meta.git_commit
                 git_branch = $meta.git_branch
-                source_path = $sourcePathVal
+                source_path = $projData.source_path
+                backup_level = $meta.backup_level
             }
         } catch {
             Write-Warning "Skipping $($snap.Name): invalid snapshot.json"
