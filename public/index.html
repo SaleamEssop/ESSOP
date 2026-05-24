@@ -539,8 +539,8 @@
                 <li class="monitor-step step-pending" id="step-git-cicd">
                   <div class="step-icon"><span class="step-dot"></span></div>
                   <div class="step-content">
-                    <span class="step-name">4. CI/CD Sync</span>
-                    <span class="step-desc">Poll GitHub Actions until server matches remote</span>
+                    <span class="step-name">4. Production Deploy</span>
+                    <span class="step-desc">Deploy on VPS via SSH if GitHub Actions has not finished</span>
                     <span class="step-progress" id="step-progress-cicd"></span>
                   </div>
                 </li>
@@ -659,7 +659,7 @@
             <!-- Git Push Action & Stepper -->
             <div class="card git-action-card">
               <h3 class="card-title-small">Push to Git</h3>
-              <p class="card-subtitle">Commit local changes and push to GitHub. CI/CD deploys to production automatically.</p>
+                <p class="card-subtitle">Commit local changes and push to GitHub, then deploy to production on the VPS.</p>
 
               <form id="git-deploy-form" class="action-form">
                 <div class="form-group">

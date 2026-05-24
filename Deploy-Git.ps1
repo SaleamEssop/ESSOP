@@ -317,60 +317,91 @@ if ($OverwriteDatabase) {
 }
 
 # ----------------------------------------------------
-# STEP 4/5: Monitor CI/CD synchronization on VPS
+# STEP 4/5: Deploy to production VPS and verify sync
 # ----------------------------------------------------
-Write-Host "`n>>> [STEP 4/${stepTotal}] Monitoring GitHub Actions CI/CD on VPS..." -ForegroundColor Cyan
-Write-Host "Polling VPS to confirm deploy-status.json matches target commit..." -ForegroundColor Yellow
+Write-Host "`n>>> [STEP 4/${stepTotal}] Deploying to production VPS..." -ForegroundColor Cyan
 
-$vpsSynced = $false
-$maxAttempts = 90 # 15 minutes max polling (90 * 10 seconds)
-$attempt = 1
+function Get-VpsDeployedCommit {
+    param([string]$PreferStatusFile = $true)
 
-while ($attempt -le $maxAttempts) {
-    Write-Host "[PROGRESS] $([math]::Min(30 + $attempt, 75))% (Polling VPS commit... Attempt $attempt/$maxAttempts)"
-    
-    try {
-        # Check remote deploy status JSON file
+    if ($PreferStatusFile) {
         $remoteCmd = "cat $vpsInstallRoot/deploy-status.json 2>/dev/null"
         $statusJson = (& $plink -ssh "${user}@${hostIp}" -batch -hostkey $hostKey -pw $pw $remoteCmd 2>$null)
-        
         if ($LASTEXITCODE -eq 0 -and $statusJson) {
             try {
                 $statusObj = $statusJson | ConvertFrom-Json
-                $remoteCommit = $statusObj.commit.Trim()
-                Write-Host "VPS Last Deployed Commit: $remoteCommit" -ForegroundColor DarkGray
-                
-                if ($remoteCommit -eq $localCommitHash) {
-                    Write-Host "SUCCESS: VPS code has fully deployed and synchronized to target commit $localCommitHash" -ForegroundColor Green
-                    $vpsSynced = $true
-                    break
+                if ($statusObj.commit) {
+                    return $statusObj.commit.Trim()
                 }
-            } catch {
-                Write-Host "Warning: Failed to parse deploy-status.json from VPS." -ForegroundColor Yellow
-            }
-        } else {
-            # Fallback to checking the current git hash in case status file doesn't exist yet
-            $remoteCmdFallback = "git -C $vpsInstallRoot log -1 --format=%H"
-            $remoteCommitFallback = (& $plink -ssh "${user}@${hostIp}" -batch -hostkey $hostKey -pw $pw $remoteCmdFallback 2>$null).Trim()
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "VPS Git HEAD Commit (Status file missing or empty): $remoteCommitFallback" -ForegroundColor DarkGray
-                if ($remoteCommitFallback -eq $localCommitHash) {
-                    Write-Host "Commit matches, but waiting for deploy-status.json to confirm completion..." -ForegroundColor Yellow
-                }
-            } else {
-                Write-Host "Warning: Failed to fetch commit hash or status from VPS (SSH connection or command error)." -ForegroundColor Yellow
-            }
+            } catch {}
         }
-    } catch {
-        Write-Host "Warning: Exception raised while polling VPS: $_" -ForegroundColor Yellow
     }
-    
+
+    $remoteCmdFallback = "git -C $vpsInstallRoot rev-parse HEAD 2>/dev/null"
+    $remoteCommitFallback = (& $plink -ssh "${user}@${hostIp}" -batch -hostkey $hostKey -pw $pw $remoteCmdFallback 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $remoteCommitFallback) {
+        return $remoteCommitFallback.Trim()
+    }
+    return $null
+}
+
+function Test-VpsCommitSynced {
+  param([string]$ExpectedCommit)
+
+  $remoteCommit = Get-VpsDeployedCommit
+  if ($remoteCommit) {
+    Write-Host "VPS Last Deployed Commit: $remoteCommit" -ForegroundColor DarkGray
+  }
+  return ($remoteCommit -and ($remoteCommit -eq $ExpectedCommit))
+}
+
+$vpsSynced = $false
+
+# Brief grace period in case GitHub Actions already deployed this push
+Write-Host "Checking whether GitHub Actions has already deployed commit $localCommitHash..." -ForegroundColor Yellow
+for ($grace = 1; $grace -le 3; $grace++) {
+    Write-Host "[PROGRESS] $([math]::Min(30 + $grace, 35))% (Waiting for GitHub Actions... Attempt $grace/3)"
+    if (Test-VpsCommitSynced -ExpectedCommit $localCommitHash) {
+        Write-Host "SUCCESS: VPS already matches target commit $localCommitHash" -ForegroundColor Green
+        $vpsSynced = $true
+        break
+    }
     Start-Sleep -Seconds 10
-    $attempt++
 }
 
 if (-not $vpsSynced) {
-    throw "Timeout or failure waiting for VPS commit synchronization. Please check GitHub Actions logs."
+    Write-Host "GitHub Actions has not updated production - running deploy-production.sh on VPS via SSH..." -ForegroundColor Yellow
+    Write-Host "[PROGRESS] 40% (Running production deploy script on VPS...)"
+    $deployCmd = "export MYSPOOLS_INSTALL_ROOT=$vpsInstallRoot; export MYSPOOLS_DEPLOY_BRANCH=$activeBranch; bash $vpsInstallRoot/scripts/deploy-production.sh"
+    $deployOutput = & $plink -ssh "${user}@${hostIp}" -batch -hostkey $hostKey -pw $pw $deployCmd 2>&1
+    Write-Host $deployOutput -ForegroundColor DarkGray
+    if ($LASTEXITCODE -ne 0) {
+        throw "Production deploy script failed on VPS with exit code $LASTEXITCODE. Review the log output above."
+    }
+    if (Test-VpsCommitSynced -ExpectedCommit $localCommitHash) {
+        Write-Host "SUCCESS: VPS deployed and synchronized to target commit $localCommitHash" -ForegroundColor Green
+        $vpsSynced = $true
+    }
+}
+
+if (-not $vpsSynced) {
+    Write-Host "Polling VPS for deploy-status.json confirmation..." -ForegroundColor Yellow
+    $maxAttempts = 30
+    $attempt = 1
+    while ($attempt -le $maxAttempts) {
+        Write-Host "[PROGRESS] $([math]::Min(40 + $attempt, 75))% (Confirming VPS commit... Attempt $attempt/$maxAttempts)"
+        if (Test-VpsCommitSynced -ExpectedCommit $localCommitHash) {
+            Write-Host "SUCCESS: VPS code has fully deployed and synchronized to target commit $localCommitHash" -ForegroundColor Green
+            $vpsSynced = $true
+            break
+        }
+        Start-Sleep -Seconds 10
+        $attempt++
+    }
+}
+
+if (-not $vpsSynced) {
+    throw "Production deploy did not reach commit $localCommitHash. Check GitHub Actions (if used) and VPS deploy logs."
 }
 
 # ----------------------------------------------------
