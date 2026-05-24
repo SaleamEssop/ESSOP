@@ -51,6 +51,9 @@ const gitFilesContainer = document.getElementById('git-files-container');
 const gitDeployForm = document.getElementById('git-deploy-form');
 const gitCommitMessage = document.getElementById('git-commit-message');
 const gitDeployBtn = document.getElementById('git-deploy-btn');
+const gitIncludeDb = document.getElementById('git-include-db');
+const gitDbWarning = document.getElementById('git-db-warning');
+const gitDbConfirm = document.getElementById('git-db-confirm');
 const gitStepper = document.getElementById('git-stepper');
 const gitDeployProgressPct = document.getElementById('git-deploy-progress-pct');
 const gitDeployProgressFill = document.getElementById('git-deploy-progress-fill');
@@ -939,6 +942,8 @@ function updateTaskStatus(task) {
     }
     if (gitRefreshBtn) gitRefreshBtn.disabled = true;
     if (gitCommitMessage) gitCommitMessage.disabled = true;
+    if (gitIncludeDb) gitIncludeDb.disabled = true;
+    if (gitDbConfirm) gitDbConfirm.disabled = true;
     
     // Update sidebar text
     sidebarDot.className = 'status-dot dot-running';
@@ -972,6 +977,8 @@ function updateTaskStatus(task) {
     }
     if (gitRefreshBtn) gitRefreshBtn.disabled = false;
     if (gitCommitMessage) gitCommitMessage.disabled = false;
+    if (gitIncludeDb) gitIncludeDb.disabled = false;
+    if (gitDbConfirm) gitDbConfirm.disabled = false;
 
     // Reset status bars
     sidebarDot.className = 'status-dot dot-idle';
@@ -1109,7 +1116,9 @@ if (settingsForm) {
 function validateGitForm() {
   if (activeTask.status === 'running') return;
   const commitMsg = gitCommitMessage ? gitCommitMessage.value.trim() : '';
-  const isDisabled = !commitMsg;
+  const includeDb = gitIncludeDb && gitIncludeDb.checked;
+  const confirmOk = !includeDb || (gitDbConfirm && gitDbConfirm.value.trim().toUpperCase() === 'FULL');
+  const isDisabled = !commitMsg || !confirmOk;
   if (gitDeployBtn) {
     gitDeployBtn.disabled = isDisabled;
   }
@@ -1131,18 +1140,37 @@ if (gitDeployForm) {
       return;
     }
 
+    const includeDb = gitIncludeDb && gitIncludeDb.checked;
+    if (includeDb) {
+      const confirmText = gitDbConfirm ? gitDbConfirm.value.trim().toUpperCase() : '';
+      if (confirmText !== 'FULL') {
+        showToast('Type FULL to confirm database overwrite.', 'warning');
+        return;
+      }
+    }
+
     resetGitDeployUI();
 
     try {
       const response = await fetch('/api/git/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commitMessage, project: currentProject })
+        body: JSON.stringify({
+          commitMessage,
+          project: currentProject,
+          overwriteDb: includeDb,
+          dbConfirm: includeDb ? 'FULL' : undefined
+        })
       });
 
       if (response.ok) {
-        showToast('Git push started. Monitoring progress...', 'success');
+        showToast(includeDb ? 'Git push with database seed started. Monitoring progress...' : 'Git push started. Monitoring progress...', 'success');
         gitCommitMessage.value = '';
+        if (gitIncludeDb) {
+          gitIncludeDb.checked = false;
+          if (gitDbWarning) gitDbWarning.style.display = 'none';
+        }
+        if (gitDbConfirm) gitDbConfirm.value = '';
         validateGitForm();
       } else {
         const err = await response.json();
@@ -1159,6 +1187,20 @@ if (gitDeployForm) {
 // Git Deployment form input validation listeners
 if (gitCommitMessage) {
   gitCommitMessage.addEventListener('input', validateGitForm);
+}
+if (gitIncludeDb) {
+  gitIncludeDb.addEventListener('change', () => {
+    if (gitDbWarning) {
+      gitDbWarning.style.display = gitIncludeDb.checked ? 'block' : 'none';
+    }
+    if (!gitIncludeDb.checked && gitDbConfirm) {
+      gitDbConfirm.value = '';
+    }
+    validateGitForm();
+  });
+}
+if (gitDbConfirm) {
+  gitDbConfirm.addEventListener('input', validateGitForm);
 }
 
 // --- Load Version Parity (local vs remote vs server) ---

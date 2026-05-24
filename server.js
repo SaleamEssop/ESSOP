@@ -43,12 +43,11 @@ function getProjectPath(projectName) {
   return proj ? proj.path : null;
 }
 
-function getComposeProjectName(projectPath, defaultName) {
+function getComposeProjectName(projectPath, defaultName, envFiles = ['.env.local', '.env']) {
   try {
-    const envFile = fs.existsSync(path.join(projectPath, '.env.local'))
-      ? path.join(projectPath, '.env.local')
-      : (fs.existsSync(path.join(projectPath, '.env')) ? path.join(projectPath, '.env') : null);
-    if (envFile) {
+    for (const rel of envFiles) {
+      const envFile = path.join(projectPath, rel);
+      if (!fs.existsSync(envFile)) continue;
       const lines = fs.readFileSync(envFile, 'utf8').split('\n');
       for (const line of lines) {
         if (line.trim().startsWith('COMPOSE_PROJECT_NAME=')) {
@@ -58,6 +57,17 @@ function getComposeProjectName(projectPath, defaultName) {
     }
   } catch (e) {}
   return defaultName;
+}
+
+function getLocalComposeProjectName(projectPath, defaultName) {
+  return getComposeProjectName(projectPath, defaultName, ['.env.local', '.env']);
+}
+
+function getRemoteComposeProjectName(projectPath, defaultName) {
+  return getComposeProjectName(projectPath, defaultName, [
+    'deploy/production/.env',
+    'deploy/production/.env.production.example'
+  ]);
 }
 
 // Global state for running tasks
@@ -1744,7 +1754,7 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        const { commitMessage, project, overwriteDb } = payload;
+        const { commitMessage, project, overwriteDb, dbConfirm } = payload;
 
         const activeProject = project || 'mypools';
         const projectPath = getProjectPath(activeProject);
@@ -1760,6 +1770,11 @@ const server = http.createServer((req, res) => {
         }
         args.push('-SourcePath', projectPath);
         if (overwriteDb) {
+          if (dbConfirm !== 'FULL') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Database overwrite requires typing FULL to confirm' }));
+            return;
+          }
           args.push('-OverwriteDatabase');
         }
 
@@ -1811,8 +1826,8 @@ const server = http.createServer((req, res) => {
       } catch (e) {}
     }
 
-    const localComposeProject = getComposeProjectName(localRepo, `${project}-local`);
-    const remoteComposeProject = getComposeProjectName(localRepo, `${project}-pod`);
+    const localComposeProject = getLocalComposeProjectName(localRepo, `${project}-local`);
+    const remoteComposeProject = getRemoteComposeProjectName(localRepo, `${project}-pod`);
     const siteUrl = settings.siteUrl || 'https://mypools.co.za';
     const siteDomain = url.parse(siteUrl).hostname || 'mypools.co.za';
     const vpsInstallRoot = settings.vpsInstallRoot || `/opt/${project.toLowerCase()}`;
@@ -2385,7 +2400,7 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    const composeProjectName = getComposeProjectName(projectPath, `${project}-local`);
+    const composeProjectName = getLocalComposeProjectName(projectPath, `${project}-local`);
 
     exec('podman stats --no-stream --format "{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}|{{.NetIO}}"', (err, stdout, stderr) => {
       if (err) {
@@ -2571,7 +2586,7 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    const localComposeProject = getComposeProjectName(projectPath, `${projectName}-local`);
+    const localComposeProject = getLocalComposeProjectName(projectPath, `${projectName}-local`);
 
     // Check containers status
     const checkContainers = () => {
@@ -3125,7 +3140,7 @@ define( 'WP_SITEURL', $scheme . '://' . $http_host );`;
           const wpConfigData = parseWpConfig();
 
           const containers = await new Promise((resolve) => {
-            const localComposeProject = getComposeProjectName(projectPath, `${project}-local`);
+            const localComposeProject = getLocalComposeProjectName(projectPath, `${project}-local`);
             exec(`podman ps -a --filter label=io.podman.compose.project=${localComposeProject} --format "{{.Names}} ({{.Status}})"`, (err, stdout) => {
               if (err) resolve('');
               else resolve(stdout.trim());

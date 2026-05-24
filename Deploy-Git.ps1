@@ -160,6 +160,27 @@ function Read-ComposeEnv {
     return $vars
 }
 
+function Read-ProductionComposeEnv {
+    param([string]$ProjPath)
+
+    $envFile = @(
+        (Join-Path $ProjPath "deploy\production\.env"),
+        (Join-Path $ProjPath "deploy\production\.env.production.example")
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    if (-not $envFile) { return @{} }
+
+    $vars = @{}
+    Get-Content $envFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -eq '' -or $line.StartsWith('#')) { return }
+        if ($line -match '^([^=]+)=(.*)$') {
+            $vars[$matches[1].Trim()] = $matches[2].Trim().Trim('"').Trim("'")
+        }
+    }
+    return $vars
+}
+
 # Guarantee database.sql never appears in git — remove from index if somehow staged
 git -C $localRepo rm --cached database.sql 2>$null | Out-Null
 $localDumpFile = Join-Path $localRepo "database.sql"
@@ -356,9 +377,15 @@ function Test-VpsCommitSynced {
 }
 
 $vpsSynced = $false
+$forceProductionDeploy = $OverwriteDatabase.IsPresent
+
+if ($forceProductionDeploy) {
+    Write-Host "Database overwrite requested - production deploy will run even if commit already matches." -ForegroundColor Yellow
+}
 
 # Brief grace period in case GitHub Actions already deployed this push
 Write-Host "Checking whether GitHub Actions has already deployed commit $localCommitHash..." -ForegroundColor Yellow
+if (-not $forceProductionDeploy) {
 for ($grace = 1; $grace -le 3; $grace++) {
     Write-Host "[PROGRESS] $([math]::Min(30 + $grace, 35))% (Waiting for GitHub Actions... Attempt $grace/3)"
     if (Test-VpsCommitSynced -ExpectedCommit $localCommitHash) {
@@ -368,16 +395,40 @@ for ($grace = 1; $grace -le 3; $grace++) {
     }
     Start-Sleep -Seconds 10
 }
+}
 
 if (-not $vpsSynced) {
     Write-Host "GitHub Actions has not updated production - running deploy-production.sh on VPS via SSH..." -ForegroundColor Yellow
     Write-Host "[PROGRESS] 40% (Running production deploy script on VPS...)"
+
+    # Force-sync git before deploy (handles manual VPS hotfixes and older deploy scripts without checkout -f).
+    $gitForceSync = "cd $vpsInstallRoot && git fetch origin $activeBranch && git checkout -f -B $activeBranch origin/$activeBranch && git reset --hard origin/$activeBranch"
+    $syncOutput = & $plink -ssh "${user}@${hostIp}" -batch -hostkey $hostKey -pw $pw $gitForceSync 2>&1
+    if ($syncOutput) { Write-Host $syncOutput -ForegroundColor DarkGray }
+    if ($LASTEXITCODE -ne 0) {
+        throw "VPS git force-sync failed with exit code $LASTEXITCODE. Resolve conflicts on the server clone manually."
+    }
+
     $deployCmd = "export MYSPOOLS_INSTALL_ROOT=$vpsInstallRoot; export MYSPOOLS_DEPLOY_BRANCH=$activeBranch; bash $vpsInstallRoot/scripts/deploy-production.sh"
     $deployOutput = & $plink -ssh "${user}@${hostIp}" -batch -hostkey $hostKey -pw $pw $deployCmd 2>&1
     Write-Host $deployOutput -ForegroundColor DarkGray
     if ($LASTEXITCODE -ne 0) {
         throw "Production deploy script failed on VPS with exit code $LASTEXITCODE. Review the log output above."
     }
+
+    if ($OverwriteDatabase.IsPresent) {
+        Write-Host "Verifying production URL migration after database import..." -ForegroundColor Cyan
+        $prodEnv = Read-ProductionComposeEnv -ProjPath $localRepo
+        $phpProject = if ($prodEnv['COMPOSE_PROJECT_NAME']) { $prodEnv['COMPOSE_PROJECT_NAME'] } else { "$($ProjectName.ToLower())-pod" }
+        $urlFixCmd = "cp $vpsInstallRoot/scripts/update-wp-urls.php $vpsInstallRoot/wordpress/update-wp-urls.php && podman exec ${phpProject}_php_1 php /var/www/html/update-wp-urls.php; ec=`$?; rm -f $vpsInstallRoot/wordpress/update-wp-urls.php; exit `$ec"
+        $urlOutput = & $plink -ssh "${user}@${hostIp}" -batch -hostkey $hostKey -pw $pw $urlFixCmd 2>&1
+        if ($urlOutput) { Write-Host $urlOutput -ForegroundColor DarkGray }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Production URL migration failed after database import. Media library and galleries require siteurl https://mypools.co.za in the database."
+        }
+        Write-Host "Production URLs verified." -ForegroundColor Green
+    }
+
     if (Test-VpsCommitSynced -ExpectedCommit $localCommitHash) {
         Write-Host "SUCCESS: VPS deployed and synchronized to target commit $localCommitHash" -ForegroundColor Green
         $vpsSynced = $true
@@ -413,7 +464,7 @@ Write-Host "[PROGRESS] 80% (Checking VPS container health...)"
 $containers = @("mysql", "redis", "php", "nginx")
 $allHealthy = $true
 
-$envVars = Read-ComposeEnv -ProjPath $localRepo
+$envVars = Read-ProductionComposeEnv -ProjPath $localRepo
 $remoteComposeProject = if ($envVars['COMPOSE_PROJECT_NAME']) { $envVars['COMPOSE_PROJECT_NAME'] } else { "$($ProjectName.ToLower())-pod" }
 Write-Host "Fetching running containers status on VPS..." -ForegroundColor Cyan
 $psCmd = "podman ps --filter 'label=io.podman.compose.project=$remoteComposeProject' --format '{{.Names}} ({{.Status}})'"
