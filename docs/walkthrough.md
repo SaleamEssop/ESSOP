@@ -9,44 +9,49 @@ This document provides a detailed step-by-step walkthrough of the codebase, proj
 The console leverages a dynamic project registry mapping project folders to the console's UI. 
 
 ### Initial Configuration (`projects.json`)
-The application registry starts with paths located on the root directory (`C:\`):
+The application registry maps project names to absolute folder paths:
 ```json
 [
   {
-    "name": "MyPools",
-    "path": "C:\\mypools"
+    "name": "mypools",
+    "path": "C:\\Podman\\MyPools"
   },
   {
-    "name": "snapshots",
-    "path": "C:\\snapshots"
+    "name": "ESSOP",
+    "path": "C:\\ESSOP"
   }
 ]
 ```
 These mappings allow the system to load settings, SSH passwords, and container details relative to the selected project's path dynamically.
+
+### Web Console Layout
+
+The web UI (`http://localhost:3050`) provides seven sidebar tabs: **Dashboard**, **Create Snapshot**, **Restore from Snapshot**, **Git Deployment**, **Health & Parity**, **Live Console**, and **Credentials & Settings**. A floating mini-console dock streams PowerShell output during background tasks.
 
 ---
 
 ## 2. Step-by-Step Operations Walkthrough
 
 ### Step 2.1: Registering a Project Folder
-1.  **Directory Selection**: In the Web UI, the user can click **Browse...** next to the path field to open a native Windows `FolderBrowserDialog` graphical selector or type the path (e.g. `C:\mycities`) manually.
+1.  **Directory Selection**: In the Web UI, click **Add Project** in the header bar, then use **Browse...** to open a native Windows `FolderBrowserDialog` or type the path (e.g. `C:\Podman\MyPools`) manually.
 2.  **Add Request**: Clicking **Add Project** sends a registration call to the backend.
-3.  **API Verification**: The endpoint `POST /api/projects/add` resolves the path. If the directory does not exist on disk, the backend automatically creates it. It validates the project name and appends the registration mapping to `projects.json`.
-4.  **Workspace Isolation**: The console automatically initializes the target workspace by creating a hidden `C:\mycities\.snapshots` directory to hold snapshots and a hidden `C:\mycities\.local` directory to store project settings.
-5.  **Registry Rebuild**: The console calls `Refresh-Registry.ps1` to index all snapshots.
+3.  **API Verification**: The endpoint `POST /api/projects/add` resolves the path. The directory **must already exist** on disk — the API returns `400` if it does not. It derives the project name from the folder basename and appends the registration mapping to `projects.json`.
+4.  **Workspace Isolation**: The console automatically initializes the target workspace by creating a `Snapshots/` directory to hold snapshots and a `.local/` directory to store project settings and config backups.
+5.  **Registry Rebuild**: The console calls `Refresh-Registry.ps1` to index all snapshots and starts config-file watchers for automatic backup on write.
 
 ### Step 2.2: Creating a Recovery Snapshot
-1.  **Selection**: The user selects a project (e.g. `MyPools`) and triggers a snapshot creation, providing a description (e.g. "Pre-release patch").
-2.  **Environment Probe**: `Create-Snapshot.ps1` checks for Podman and retrieves environment configurations (like database passwords and project names) from the project's `.env` or `.env.local` files.
-3.  **Container Teardown (Powered-Off Snapshot)**: If `Live` mode is not selected, the script calls `podman compose down` to stop all containers, preventing write operations during backup.
-4.  **Database Dump**: The script starts just the database container, probes it for mariadb-dump or mysqldump, and dumps the schema to `C:\mypools\.snapshots\[timestamp]\database.sql`.
-5.  **Files Archiving**: The project directory files are compressed into `project.zip` using the `ZipArchive` library. To keep the backups lightweight, critical folders and files (like `wp-content/uploads`, `.git/`, `node_modules/`, and the `.snapshots/` folder itself) are explicitly ignored.
-6.  **Gitignore Security**: The script automatically checks `.gitignore` in the project root, adding rules to block `.snapshots/` and `.local/` from ever being staged or committed to git.
-7.  **Metadata Generation**: Writes metadata details (timestamp, description, size, git branch/commit hash) to `snapshot.json` and creates a markdown recovery manual `recovery.md`.
-8.  **Re-Initialize & Prune**: 
+1.  **Selection**: The user selects a project (e.g. `mypools`) and opens the **Create Snapshot** tab, providing a description (e.g. "Pre-release patch").
+2.  **Backup Level**: Choose **High** (full recovery), **Medium** (code + DB, no uploads/secrets), or **Low** (framework only, preserves contractor data).
+3.  **Environment Probe**: `Create-Snapshot.ps1` checks for Podman and retrieves environment configurations (like database passwords and project names) from the project's `.env` or `.env.local` files.
+4.  **Container Teardown (Powered-Off Snapshot)**: If `Live` mode is not selected, the script calls `podman compose down` to stop all containers, preventing write operations during backup.
+5.  **Database Dump**: The script starts just the database container, probes it for mariadb-dump or mysqldump, and dumps the schema to `C:\Podman\MyPools\Snapshots\[timestamp]\database.sql`.
+6.  **Files Archiving**: The project directory files are compressed into `project.zip` using the `ZipArchive` library. To keep the backups lightweight, critical folders and files (like `wp-content/uploads`, `.git/`, `node_modules/`, and the `Snapshots/` folder itself) are explicitly ignored.
+7.  **Gitignore Security**: The script automatically checks `.gitignore` in the project root, adding rules to block `Snapshots/`, `.snapshots/`, and `.local/` from ever being staged or committed to git.
+8.  **Metadata Generation**: Writes metadata details (timestamp, description, size, git branch/commit hash, backup level) to `snapshot.json` and creates a markdown recovery manual `recovery.md`.
+9.  **Re-Initialize & Prune**: 
     *   Containers are restarted via `podman compose up -d`.
     *   `active.txt` is updated with the timestamp.
-    *   If a snapshot retention limit is set (e.g. 5), the oldest snapshot folders in `.snapshots/` are automatically deleted to clean up disk space.
+    *   If a snapshot retention limit is set (e.g. 5), the oldest snapshot folders in `Snapshots/` are automatically deleted to clean up disk space.
     *   `Refresh-Registry.ps1` runs to re-index the registry.
 
 ### Step 2.3: Restoring a Snapshot
@@ -61,43 +66,75 @@ These mappings allow the system to load settings, SSH passwords, and container d
 7.  **TLS certificates**: Generates local edge SSL certificates if missing.
 8.  **Stack Wakeup**: Restarts the entire compose stack and checks container health.
 
-### Step 2.4: Snapshot-Enforced Production Deployment
+### Step 2.4: Git Push to Production (Primary Web UI Flow)
 ```mermaid
 sequenceDiagram
-    participant UI as Web Console / WinForms
+    participant UI as Web Console
+    participant SV as server.js Node Backend
+    participant DP as Deploy-Git.ps1 Script
+    participant GH as GitHub Remote Repository
+    participant VP as Production VPS Server
+
+    UI->>SV: POST /api/git/push (Commit Message, Project)
+    SV->>DP: Execute Deploy-Git.ps1 -GitOnly
+    Note over DP: Safe Commit: Remove database.sql<br/>from Git Index (Untracked)
+    DP->>GH: git commit & git push origin main
+    Note over VP: GitHub Action runs:<br/>Pulls commits, restarts stack,<br/>Updates deploy-status.json
+    DP->>VP: Poll /opt/[project]/deploy-status.json via SSH
+    VP-->>DP: Return matched Git Commit Hash
+    DP-->>SV: Return successful push payload
+    SV-->>UI: Output success via SSE stream
+```
+
+1.  **Version Parity Check**: The Git Deployment tab displays Local, Git Remote, and Server commit hashes via `GET /api/git/versions`. When remote and server are out of sync, the UI polls every 8 seconds until parity is restored.
+2.  **Modified Files Review**: `GET /api/git/status` lists modified and untracked files in the local working tree.
+3.  **Push Action**: The user enters a commit message and clicks **Push to Git**. This calls `POST /api/git/push` with the current local workspace (no snapshot selection required).
+4.  **Git Cleanup**: `Deploy-Git.ps1` verifies that `database.sql` is removed from the git index and deletes any local SQL dump inside the repository to keep git commits code-only.
+5.  **Local Commit & Push**: Code changes are staged, committed, and pushed to origin. CI/CD on the VPS pulls and deploys automatically.
+6.  **Optional Database Overwrite**: If `overwriteDb: true` is sent in the payload, the script SCPs `database.sql` from the active snapshot to `/opt/[project]/database.sql` on the VPS and restores it remotely.
+7.  **Polling Deployment State**: The script polls `/opt/[project]/deploy-status.json` on the VPS over SSH until the remote commit matches the local HEAD commit hash.
+
+### Step 2.5: Snapshot-Enforced Deployment (Legacy API Path)
+
+The endpoint `POST /api/git/deploy` remains available for programmatic use but is **not exposed in the current web UI**. It requires a valid `snapshotName` and rejects `current-local`:
+
+```mermaid
+sequenceDiagram
+    participant API as API Client
     participant SV as server.js Node Backend
     participant DP as Deploy-Git.ps1 Script
     participant RS as Restore-Snapshot.ps1
     participant GH as GitHub Remote Repository
     participant VP as Production VPS Server
 
-    UI->>SV: POST /api/git/deploy (Target Snapshot, Project)
+    API->>SV: POST /api/git/deploy (Target Snapshot, Project)
     Note over SV: Enforce Snapshot Selection<br/>(Block "current-local" requests)
     SV->>DP: Execute Deploy-Git.ps1 -SnapshotName
     DP->>RS: Restore Snapshot locally to Project folder
-    Note over DP: Safe Commit: Remove database.sql<br/>from Git Index (Untracked)
     DP->>GH: git commit & git push origin main
-    Note over DP: Direct DB Sync (Bypass Git)
-    DP->>VP: SCP database.sql directly to VPS
-    DP->>VP: Poll /opt/[project]/deploy-status.json via SSH
-    Note over VP: GitHub Action runs:<br/>Pulls commits, restores DB,<br/>Updates deploy-status.json
+    DP->>VP: SCP database.sql (if overwriteDb)
+    DP->>VP: Poll deploy-status.json via SSH
     VP-->>DP: Return matched Git Commit Hash
-    DP->>VP: Run Production Health Audit
-    DP-->>SV: Return successful deploy payload
-    SV-->>UI: Output success and Parity Status
 ```
 
-1.  **Mandatory Selection**: In the Git Deploy tab, the "Current Local Workspace" option is omitted. The deployment can only be initiated by selecting a verified recovery snapshot.
-2.  **Local Workspace Alignment**: `Deploy-Git.ps1` calls `Restore-Snapshot.ps1` locally first to restore the snapshot files to the local folder, aligning the local workspace with the target deployment.
-3.  **Git Cleanup**: The script verifies that `database.sql` is removed from the git index (if staged) and deletes any local SQL file inside the repository to keep git commits code-only.
-4.  **Local Commit & Push**: Code changes are staged, committed, and pushed to origin.
-5.  **Database Transport (SCP)**: If the user checked "Overwrite Database", the script uploads `database.sql` directly to `/opt/[project]/database.sql` on the VPS over SCP (using `pscp.exe`), bypasses git, and executes a database restoration on the remote database container.
-6.  **Polling Deployment State**: The script polls `/opt/[project]/deploy-status.json` on the VPS over SSH until the remote commit matches the local HEAD commit hash, indicating the VPS has finished pulling and restarting.
-7.  **Post-Deployment Audits**: Initiates the remote parity check pipeline.
+1.  **Mandatory Selection**: `snapshotName` must be a valid recovery snapshot ID; `"current-local"` returns `400 Bad Request`.
+2.  **Local Workspace Alignment**: `Deploy-Git.ps1` calls `Restore-Snapshot.ps1` locally first, aligning the workspace with the target snapshot before committing.
+3.  **Remaining steps** follow the same commit, push, SCP, and polling pipeline as Step 2.4.
 
 ---
 
-## 3. Remote VPS Parity & Health Verification Checks
+## 3. Local Health & Diagnostics
+
+Local health data is served by `GET /api/local-health` and rendered in two places in the web UI:
+
+*   **Dashboard tab** — container status grid, MariaDB connectivity, HTTP checks (homescreen, WordPress, media/thumbnails), and the diagnostics & fix console with one-click repairs.
+*   **Health & Parity tab → Local Health & Paths sub-panel** — port conflict monitor, container resource stats, WordPress test-path cards (local + LAN), and config-backup history with preview/restore.
+
+Config files (`.env`, `compose.yml`, nginx configs, `wp-config.local.php`) are watched at server boot via `fs.watch`. On change, timestamped backups are saved to `<project>/.local/config-backups/` (last 15 per file retained).
+
+---
+
+## 4. Remote VPS Parity & Health Verification Checks
 
 The parity verification checks run automatically at the end of the deployment pipeline and can be triggered on-demand via the Web Console interface.
 
@@ -139,12 +176,12 @@ The parity verification checks run automatically at the end of the deployment pi
 
 ---
 
-## 4. Verification & Validation Results
+## 5. Verification & Validation Results
 
 Below are samples of verification logs and JSON response schemas returned by the API during system operation.
 
-### A. Deploy Validation Constraint (Bypassing Snapshot Check)
-*   **Action**: Post deployment payload with `"snapshotName": "current-local"`.
+### A. Deploy Validation Constraint (Legacy Snapshot Deploy API)
+*   **Action**: POST to `/api/git/deploy` with `"snapshotName": "current-local"`.
 *   **Response**: Correctly blocks the request, returning `400 Bad Request` and message:
     ```json
     {
@@ -153,16 +190,16 @@ Below are samples of verification logs and JSON response schemas returned by the
     ```
 
 ### B. Project Addition API Check
-*   **Action**: POST to `/api/projects/add` with `{ "path": "C:\\mycities" }`.
-*   **Response**: Correctly creates folders, registers mapping, and rebuilds registry cache:
+*   **Action**: POST to `/api/projects/add` with `{ "path": "C:\\Podman\\MyPools" }` (folder must exist).
+*   **Response**: Registers mapping, initializes `Snapshots/` and `.local/`, and rebuilds registry cache:
     ```json
     {
       "success": true,
-      "projects": ["MyPools", "snapshots", "mycities"],
+      "projects": ["mypools", "ESSOP", "MyPools"],
       "details": [
-        { "name": "MyPools", "path": "C:\\mypools" },
-        { "name": "snapshots", "path": "C:\\snapshots" },
-        { "name": "mycities", "path": "C:\\mycities" }
+        { "name": "mypools", "path": "C:\\Podman\\MyPools" },
+        { "name": "ESSOP", "path": "C:\\ESSOP" },
+        { "name": "MyPools", "path": "C:\\Podman\\MyPools" }
       ]
     }
     ```

@@ -1,6 +1,23 @@
-Walkthrough: Local Health & Paths Tab
+Walkthrough: Local Health & Diagnostics
 What Was Built
-A new Local Health & Paths dashboard tab has been fully implemented in the Snapshot Recovery Console. Access it from the sidebar at http://localhost:3050.
+Local health monitoring and automated fix capabilities are integrated into the ESSOP web console at http://localhost:3050. Data is fetched from GET /api/local-health and polled every 6 seconds while the Dashboard or Health & Parity tab is active.
+
+UI Locations
+The local health features are split across two areas of the web console:
+
+1. Dashboard tab (primary health widgets)
+   - Local Stack Container Monitor (5-service grid: php, nginx, mysql, redis, edge)
+   - MariaDB connectivity test panel
+   - HTTP connectivity checks: Homescreen, WordPress Engine, Media & Thumbnails
+   - Diagnostics & Fix Console with one-click repair buttons
+   - Restart Compose Stack button
+   - Restart ESSOP Server button
+
+2. Health & Parity tab → Local Health & Paths sub-panel
+   - Local Port Monitor (compose port conflict detection)
+   - Resource Monitor (podman stats: CPU, memory, network)
+   - WordPress Local & Mobile Test Paths (clickable URL cards with copy buttons)
+   - Live Config Backup History (preview and restore rolling backups)
 
 Features
 1. Container Status Monitor
@@ -12,13 +29,13 @@ nginx	Blue	podman ps output
 mysql	Amber	podman ps output
 redis	Red	podman ps output
 edge	Green	podman ps output
-Cards show container name, raw status text (Up 2 hours (healthy)), and color-coded border — green for running, red for stopped, grey for missing.
+Cards show container name, raw status text (Up 2 hours (healthy)), and color-coded border — green for running, red for stopped, grey for missing. Stopped services show a Heal Service button.
 
 2. MariaDB Connectivity Test
 Live test that runs inside the mysql container:
 
 podman exec -i <container> mariadb -u<user> -p<pass> -e "SELECT 1;"
-Falls back to mysql client if mariadb binary is not present. Shows ✓ Connected or ✗ Failed with the exact error message.
+Falls back to mysql client if mariadb binary is not present. Shows Connected or Failed with the exact error message.
 
 3. Diagnostics & Fix Console
 Automatically scans:
@@ -27,7 +44,7 @@ DB_HOST: Must be mysql (Compose service name), not localhost
 WP_HOME / WP_SITEURL: Warns if hardcoded (https://127.0.0.1:8443) instead of dynamic
 Nginx proxy_pass: Must point to http://php:80
 Nginx Host header: Must have proxy_set_header Host $http_host;
-Each issue shows a Quick Fix button that patches the file in-place and refreshes the view.
+Each issue shows a Quick Fix button that patches the file in-place and refreshes the view via POST /api/local-health/fix.
 
 4. WordPress Local & Mobile Test Paths
 Four path cards with all URLs for local and LAN testing:
@@ -37,14 +54,14 @@ Host Direct HTTP	http://127.0.0.1:9080/{wp-admin,/,splash}
 Host HTTPS Edge	https://127.0.0.1:8443/{wp-admin,/,wp-login}
 Mobile LAN HTTP	http://192.168.x.x:9080/{splash,/,wp-admin}
 Mobile LAN HTTPS	https://192.168.x.x:8443/{splash,/,wp-admin}
-⚠️ Use HTTP on port 9080 (plain), HTTPS on 8443 (TLS edge). Do NOT use https://...9080 — that port has no TLS.
+Use HTTP on port 9080 (plain), HTTPS on 8443 (TLS edge). Do NOT use https://...9080 — that port has no TLS.
 
 Each URL has a one-click Copy button and opens in a new tab.
 
 LAN IP is auto-detected from network interfaces each poll cycle.
 
 5. Live Config Backup History
-Config files are watched automatically via fs.watch (started at server boot).
+Config files are watched automatically via fs.watch (started at server boot per registered project).
 
 Files watched per project:
 
@@ -55,29 +72,29 @@ nginx/conf.d/*.conf
 secrets/wp-config.local.php
 On any write, a timestamped .bak copy is saved to <project>/.local/config-backups/. Last 15 backups per file are retained.
 
-The tab shows a timeline of the last 30 backups with:
+The Health & Parity tab shows a timeline of the last 30 backups with:
 
-Preview button — loads file content inline
-Restore button — copies backup back to its original path (with confirm dialog)
+Preview button — loads file content inline via GET /api/local-health/backups
+Restore button — copies backup back to its original path via POST /api/local-health/backups/restore (with confirm dialog)
+
 6. Restart Compose Stack Button
-Top-right danger button runs podman compose down + podman compose up -d. Output streams to the Live Console (mini terminal).
+Dashboard danger button runs podman compose down + podman compose up -d. Output streams to the Live Console (mini terminal).
 
-Files Changed
-File	Change
-server.js
-Added GET /api/local-health, POST /api/local-health/fix, GET /api/local-health/backups, POST /api/local-health/backups/restore. Fixed DB test to use mariadb binary.
-public/index.html
-Added sidebar nav button + full tab-local-health section
-public/app.js
-Added loadLocalHealth, startLocalHealthPolling, stopLocalHealthPolling, all render functions, fix/restore handlers
-public/style.css
-Added ~350 lines of glassmorphic styles for health grids, diagnostics cards, path cards, backup timeline
-All files synced to C:\ESSOP.
+API Endpoints
+GET  /api/local-health?project=[name]           — full health payload
+POST /api/local-health/fix                      — apply automated fix (fixType in body)
+GET  /api/local-health/backups?project=[name]   — list or preview config backups
+POST /api/local-health/backups/restore          — restore a named backup file
+POST /api/server/restart                        — restart ESSOP Node.js server
+
+Implementation Files
+server.js   — health engine, config watchers, MU-plugin templates, fix handlers
+public/index.html — Dashboard health widgets + Health & Parity sub-panel markup
+public/app.js       — loadLocalHealth, render functions, fix/restore handlers, 6s polling
+public/style.css    — health grids, diagnostics cards, path cards, backup timeline styles
 
 Verification Results
 API response from GET /api/local-health?project=mypools:
-
-json
 
 {
   "containers": {
@@ -98,4 +115,4 @@ json
     "edgePort": "8443"
   }
 }
-The wpUrls: "warning" is expected — the WP config has https://127.0.0.1:8443 hardcoded. Use the Enable Dynamic URLs quick-fix button to patch it.
+The wpUrls: "warning" is expected when WP config has https://127.0.0.1:8443 hardcoded. Use the Enable Dynamic URLs quick-fix button to patch it.

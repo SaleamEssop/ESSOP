@@ -1674,8 +1674,18 @@ const server = http.createServer((req, res) => {
         });
       }),
       // 3. Get Server Commit
-      runSsh(`cat ${vpsInstallRoot}/deploy-status.json 2>/dev/null || git -C ${vpsInstallRoot} log -1 --format=%H`)
-    ]).then(([localCommit, remoteCommit, vpsCommitRaw]) => {
+      runSsh(`cat ${vpsInstallRoot}/deploy-status.json 2>/dev/null || git -C ${vpsInstallRoot} log -1 --format=%H`),
+      // 4. Detect uncommitted local changes (dirty working tree)
+      new Promise((resolve) => {
+        exec(`git -C "${localRepo}" status --porcelain`, (err, stdout) => {
+          resolve(!err && stdout.trim().length > 0);
+        });
+      }),
+      // 5. Detect uncommitted changes on VPS (dirty server tree)
+      runSsh(`git -C ${vpsInstallRoot} status --porcelain 2>/dev/null`).then(raw => {
+        return raw.trim().length > 0;
+      }).catch(() => false)
+    ]).then(([localCommit, remoteCommit, vpsCommitRaw, localDirty, serverDirty]) => {
       let serverCommit = vpsCommitRaw;
       if (serverCommit) {
         serverCommit = serverCommit.trim();
@@ -1698,7 +1708,8 @@ const server = http.createServer((req, res) => {
       const remoteShort = remoteCommit ? remoteCommit.substring(0, 7) : '';
       const serverShort = serverCommit ? serverCommit.substring(0, 7) : '';
 
-      const parity = (localCommit && remoteCommit && serverCommit && localCommit === remoteCommit && localCommit === serverCommit) ? true : false;
+      const localAhead = !!(localCommit && remoteCommit && localCommit !== remoteCommit);
+      const parity = (!localDirty && !serverDirty && localCommit && remoteCommit && serverCommit && localCommit === remoteCommit && localCommit === serverCommit) ? true : false;
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -1708,7 +1719,10 @@ const server = http.createServer((req, res) => {
         remoteShort,
         server: serverCommit,
         serverShort,
-        parity
+        parity,
+        localDirty,
+        localAhead,
+        serverDirty
       }));
     }).catch(err => {
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1747,8 +1761,6 @@ const server = http.createServer((req, res) => {
         args.push('-SourcePath', projectPath);
         if (overwriteDb) {
           args.push('-OverwriteDatabase');
-        } else {
-          args.push('-GitOnly');
         }
 
         runPowerShellScript('Deploy-Git.ps1', args);
@@ -2807,6 +2819,46 @@ const server = http.createServer((req, res) => {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Health check failed: ' + err.message }));
     });
+    return;
+  }
+
+  // GET /api/server/status
+  if (pathname === '/api/server/status' && method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      online: true,
+      pid: process.pid,
+      port: PORT,
+      uptime: process.uptime(),
+      nodeVersion: process.version
+    }));
+    return;
+  }
+
+  // POST /api/server/restart
+  if (pathname === '/api/server/restart' && method === 'POST') {
+    if (activeTask.status === 'running') {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Cannot restart while a task is running. Wait for it to finish first.' }));
+      return;
+    }
+
+    const pid = process.pid;
+    const restartScript = path.join(SNAPSHOTS_ROOT, 'Restart-Server.ps1');
+    const quote = (value) => `"${String(value).replace(/"/g, '""')}"`;
+    const restartCmd = [
+      'start "" /B powershell.exe',
+      '-NoProfile -NonInteractive -ExecutionPolicy Bypass',
+      `-File ${quote(restartScript)}`,
+      `-ParentPid ${pid}`,
+      `-NodeExe ${quote(process.execPath)}`,
+      `-Root ${quote(SNAPSHOTS_ROOT)}`
+    ].join(' ');
+
+    exec(restartCmd, { windowsHide: true, cwd: SNAPSHOTS_ROOT }, () => {});
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Server restarting...' }));
     return;
   }
 

@@ -8,7 +8,6 @@ let activeDeleteSnapshot = null;
 let sseSource = null;
 let projectFiles = [];
 const excludedPaths = new Set();
-let gitParityInterval = null;
 
 // DOM Elements - Selector Registry
 const projectSelect = document.getElementById('project-select');
@@ -38,15 +37,26 @@ const settingsSaveBtn = document.getElementById('settings-save-btn');
 // Git Deployment Tab DOM Elements
 const gitRefreshBtn = document.getElementById('git-refresh-btn');
 const gitBranchVal = document.getElementById('git-branch-val');
+// Wire git refresh button
+if (gitRefreshBtn) {
+  gitRefreshBtn.addEventListener('click', () => {
+    loadGitStatus();
+    loadVersionParity();
+    showToast('Refreshing git status...', 'info');
+  });
+}
 const gitModifiedCount = document.getElementById('git-modified-count');
 const gitUntrackedCount = document.getElementById('git-untracked-count');
 const gitFilesContainer = document.getElementById('git-files-container');
 const gitDeployForm = document.getElementById('git-deploy-form');
 const gitCommitMessage = document.getElementById('git-commit-message');
 const gitDeployBtn = document.getElementById('git-deploy-btn');
-const gitIncludeDb = document.getElementById('git-include-db');
-const gitDbWarning = document.getElementById('git-db-warning');
 const gitStepper = document.getElementById('git-stepper');
+const gitDeployProgressPct = document.getElementById('git-deploy-progress-pct');
+const gitDeployProgressFill = document.getElementById('git-deploy-progress-fill');
+const gitDeployStatusText = document.getElementById('git-deploy-status-text');
+const gitCicdStatusBanner = document.getElementById('git-cicd-status-banner');
+const gitCicdStatusText = document.getElementById('git-cicd-status-text');
 // File progress bar elements
 const gitFileProgressContainer = document.getElementById('git-file-progress-container');
 const gitFileProgressText = document.getElementById('git-file-progress-text');
@@ -62,9 +72,14 @@ const gitVersionLocalIcon = document.getElementById('git-version-local-icon');
 const gitVersionRemoteIcon = document.getElementById('git-version-remote-icon');
 const gitVersionServerIcon = document.getElementById('git-version-server-icon');
 
-// Stepper Step Elements (2-step git push)
+// Stepper Step Elements (5-step git deployment pipeline)
 const stepGitCommit = document.getElementById('step-git-commit');
 const stepGitPush   = document.getElementById('step-git-push');
+const stepGitVps    = document.getElementById('step-git-vps');
+const stepGitCicd   = document.getElementById('step-git-cicd');
+const stepGitVerify = document.getElementById('step-git-verify');
+
+let gitParityInterval = null;
 
 // Overview Tab Metrics (Moved to Health & Parity)
 const overviewDir = document.getElementById('overview-dir');
@@ -194,16 +209,24 @@ function showToast(message, type = 'info') {
 
 // --- Console Log Writer (Writes to Full and Docked Mini Consoles) ---
 function appendConsoleLog(text, stream = 'stdout') {
-  // Check for progress match e.g. [PROGRESS] 45%
-  const progressMatch = text.match(/\[PROGRESS\]\s+(\d+)%/i);
+  const isDeployTask = activeTask.type === 'deploy' || lastTaskType === 'deploy';
+
+  // Check for progress match e.g. [PROGRESS] 45% (message...)
+  const progressMatch = text.match(/\[PROGRESS\]\s+(\d+)%(?:\s*\(([^)]*)\))?/i);
   if (progressMatch) {
     const pct = parseInt(progressMatch[1], 10);
+    if (isDeployTask) {
+      updateStepperFromLog(text);
+      if (progressMatch[2] && gitDeployStatusText) {
+        gitDeployStatusText.textContent = progressMatch[2];
+      }
+    }
     updateProgress(pct);
-    return; // Hide progress metadata from the terminal log stream to keep it clean
+    return;
   }
 
   // Update stepper if active task is deployment
-  if (activeTask.type === 'deploy' || lastTaskType === 'deploy') {
+  if (isDeployTask) {
     updateStepperFromLog(text);
   }
 
@@ -284,6 +307,8 @@ function updateProgress(pct) {
   const terminalProgressContainer = document.getElementById('terminal-progress-container');
   const terminalProgressFill = document.getElementById('terminal-progress-fill');
 
+  const gitDeployProgressCard = document.getElementById('git-deploy-progress-card');
+
   // Display containers
   if (sidebarProgressContainer) sidebarProgressContainer.style.display = 'block';
   if (miniProgressContainer) miniProgressContainer.style.display = 'block';
@@ -307,6 +332,11 @@ function updateProgress(pct) {
   if (sidebarProgressFill) sidebarProgressFill.style.width = `${pct}%`;
   if (miniProgressFill) miniProgressFill.style.width = `${pct}%`;
   if (terminalProgressFill) terminalProgressFill.style.width = `${pct}%`;
+
+  // Git Deployment tab — always-visible pipeline progress
+  if (gitDeployProgressPct) gitDeployProgressPct.textContent = `${pct}%`;
+  if (gitDeployProgressFill) gitDeployProgressFill.style.width = `${pct}%`;
+  if (gitDeployProgressCard) gitDeployProgressCard.classList.add('is-active');
 }
 
 // --- Hide and Reset Progress Bars ---
@@ -360,6 +390,7 @@ navItems.forEach(item => {
     // Manage polling and fetch tab-specific data
     if (targetTab === 'dashboard') {
       startLocalHealthPolling();
+      loadServerStatus();
     } else if (targetTab === 'parity') {
       startStatsPolling();
       checkLocalPorts();
@@ -669,7 +700,7 @@ async function loadGitStatus() {
   if (gitBranchVal) gitBranchVal.textContent = '-';
 
   try {
-    const response = await fetch(`/api/git/status?project=${currentProject}`);
+    const response = await fetch(`/api/git/status?project=${currentProject}&_=${Date.now()}`);
     if (!response.ok) throw new Error('API Error');
     const data = await response.json();
 
@@ -678,7 +709,7 @@ async function loadGitStatus() {
     if (gitUntrackedCount) gitUntrackedCount.textContent = data.untrackedCount || '0';
 
     const totalChanged = (data.modifiedCount || 0) + (data.untrackedCount || 0);
-    const totalFiles = data.totalTrackedFiles || (data.files && data.files.length) || 0;
+    const totalFiles = (data.files && data.files.length) || 0;
 
     // Update file progress bar
     if (gitFileProgressContainer && totalFiles > 0) {
@@ -724,17 +755,65 @@ async function loadGitStatus() {
   }
 }
 
+// --- Reset Git Deployment progress UI ---
+function resetGitDeployUI() {
+  updateProgress(0);
+  if (gitDeployProgressPct) gitDeployProgressPct.textContent = '0%';
+  if (gitDeployProgressFill) gitDeployProgressFill.style.width = '0%';
+  if (gitDeployStatusText) {
+    gitDeployStatusText.textContent = 'Deployment pipeline running...';
+  }
+  const gitDeployProgressCard = document.getElementById('git-deploy-progress-card');
+  if (gitDeployProgressCard) gitDeployProgressCard.classList.add('is-active');
+  resetStepper();
+}
+
+function stopGitParityPolling() {
+  if (gitParityInterval) {
+    clearInterval(gitParityInterval);
+    gitParityInterval = null;
+  }
+}
+
+function startGitParityPolling() {
+  if (gitParityInterval) return;
+  gitParityInterval = setInterval(() => {
+    if (activeTask.status !== 'running') {
+      loadVersionParity();
+    }
+  }, 8000);
+}
+
+function updateGitCicdBanner(data) {
+  if (!gitCicdStatusBanner) return;
+  const cicdActive = data.remote && data.server && data.remote !== data.server && !data.localDirty;
+  if (cicdActive) {
+    gitCicdStatusBanner.style.display = 'flex';
+    if (gitCicdStatusText) {
+      gitCicdStatusText.textContent = `CI/CD syncing — remote ${data.remoteShort} → server ${data.serverShort || 'pending'}`;
+    }
+    startGitParityPolling();
+  } else {
+    gitCicdStatusBanner.style.display = 'none';
+    if (!data.remote || !data.server || data.parity) {
+      stopGitParityPolling();
+    }
+  }
+}
+
 // --- Stepper Controls helper ---
 function resetStepper() {
-  const steps = [stepGitCommit, stepGitPush];
+  const steps = [stepGitCommit, stepGitPush, stepGitVps, stepGitCicd, stepGitVerify];
   steps.forEach(step => {
     if (step) step.className = 'monitor-step step-pending';
   });
-  // Reset progress text
-  const stepProgressCommit = document.getElementById('step-progress-commit');
-  const stepProgressPush = document.getElementById('step-progress-push');
-  if (stepProgressCommit) stepProgressCommit.textContent = '';
-  if (stepProgressPush) stepProgressPush.textContent = '';
+  ['step-progress-commit', 'step-progress-push', 'step-progress-vps', 'step-progress-cicd', 'step-progress-verify'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = '';
+      el.style.color = '';
+    }
+  });
 }
 
 function setStepStatus(stepElement, status) {
@@ -743,27 +822,22 @@ function setStepStatus(stepElement, status) {
 }
 
 function updateStepperFromLog(text) {
-  // Detect step format: [STEP X/Y] where Y is 2 or 5
   const stepMatch = text.match(/\[STEP (\d+)\/(\d+)\]/);
   if (stepMatch) {
-    const stepNum = parseInt(stepMatch[1]);
-    // Mark prior steps as completed, current as running
-    if (stepNum >= 1) {
-      if (stepNum > 1) setStepStatus(stepGitCommit, 'completed');
-      if (stepNum === 1) setStepStatus(stepGitCommit, 'running');
-    }
-    if (stepNum >= 2) {
-      if (stepNum > 2) setStepStatus(stepGitPush, 'completed');
-      if (stepNum === 2) setStepStatus(stepGitPush, 'running');
-    }
-    // Update progress percentage
+    const stepNum = parseInt(stepMatch[1], 10);
+    const allSteps = [stepGitCommit, stepGitPush, stepGitVps, stepGitCicd, stepGitVerify];
+    const progressIds = ['step-progress-commit', 'step-progress-push', 'step-progress-vps', 'step-progress-cicd', 'step-progress-verify'];
+
+    allSteps.forEach((step, idx) => {
+      const n = idx + 1;
+      if (stepNum > n) setStepStatus(step, 'completed');
+      else if (stepNum === n) setStepStatus(step, 'running');
+    });
+
     const progressMatch = text.match(/\[PROGRESS\]\s*(\d+)%/);
     if (progressMatch) {
-      const pct = parseInt(progressMatch[1]);
-      // Determine which step has the progress
-      let progressEl = null;
-      if (stepNum === 1) progressEl = document.getElementById('step-progress-commit');
-      if (stepNum === 2) progressEl = document.getElementById('step-progress-push');
+      const pct = parseInt(progressMatch[1], 10);
+      const progressEl = document.getElementById(progressIds[stepNum - 1]);
       if (progressEl) {
         progressEl.textContent = `${pct}%`;
         progressEl.style.color = pct >= 100 ? 'var(--green)' : 'var(--text-desc)';
@@ -771,7 +845,7 @@ function updateStepperFromLog(text) {
     }
     return;
   }
-  // Completion detection
+
   if (text.includes('Changes committed successfully') || text.includes('Working tree clean')) {
     setStepStatus(stepGitCommit, 'completed');
   }
@@ -779,14 +853,33 @@ function updateStepperFromLog(text) {
     setStepStatus(stepGitCommit, 'completed');
     setStepStatus(stepGitPush, 'completed');
   }
-  if (text.includes('[Recovery State Completed...]')) {
+  if (text.includes('VPS state verified') || text.includes('Snapshot uploaded to VPS successfully')) {
     setStepStatus(stepGitCommit, 'completed');
     setStepStatus(stepGitPush, 'completed');
+    setStepStatus(stepGitVps, 'completed');
+  }
+  if (text.includes('VPS code has fully deployed and synchronized') || text.includes('SUCCESS: VPS code has fully deployed')) {
+    setStepStatus(stepGitCommit, 'completed');
+    setStepStatus(stepGitPush, 'completed');
+    setStepStatus(stepGitVps, 'completed');
+    setStepStatus(stepGitCicd, 'completed');
+  }
+  if (text.includes('Parity & health verification completed') || text.includes('[Recovery State Completed...]')) {
+    allStepsComplete();
   }
   if (text.includes('[Recovery State Completed with warnings...]')) {
     setStepStatus(stepGitCommit, 'completed');
-    setStepStatus(stepGitPush, 'failed');
+    setStepStatus(stepGitPush, 'completed');
+    setStepStatus(stepGitVps, 'completed');
+    setStepStatus(stepGitCicd, 'completed');
+    setStepStatus(stepGitVerify, 'failed');
   }
+}
+
+function allStepsComplete() {
+  [stepGitCommit, stepGitPush, stepGitVps, stepGitCicd, stepGitVerify].forEach(step => {
+    setStepStatus(step, 'completed');
+  });
 }
 
 
@@ -846,7 +939,6 @@ function updateTaskStatus(task) {
     }
     if (gitRefreshBtn) gitRefreshBtn.disabled = true;
     if (gitCommitMessage) gitCommitMessage.disabled = true;
-    if (gitIncludeDb) gitIncludeDb.disabled = true;
     
     // Update sidebar text
     sidebarDot.className = 'status-dot dot-running';
@@ -880,7 +972,6 @@ function updateTaskStatus(task) {
     }
     if (gitRefreshBtn) gitRefreshBtn.disabled = false;
     if (gitCommitMessage) gitCommitMessage.disabled = false;
-    if (gitIncludeDb) gitIncludeDb.disabled = false;
 
     // Reset status bars
     sidebarDot.className = 'status-dot dot-idle';
@@ -896,22 +987,26 @@ function updateTaskStatus(task) {
 // --- Handle Task Termination event ---
 function handleTaskCompleted(code) {
   if (lastTaskType === 'deploy') {
+    const gitDeployProgressCard = document.getElementById('git-deploy-progress-card');
     if (code === 0) {
-      setStepStatus(stepGitCommit, 'completed');
-      setStepStatus(stepGitPush,   'completed');
-      setStepStatus(stepGitScp,    'completed');
-      setStepStatus(stepGitCicd,   'completed');
-      setStepStatus(stepGitVerify, 'completed');
+      allStepsComplete();
+      updateProgress(100);
+      if (gitDeployStatusText) {
+        gitDeployStatusText.textContent = 'Deployment complete — all pipeline steps finished successfully.';
+      }
       showToast('Production deployment completed successfully!', 'success');
     } else {
-      // Mark whichever step is currently running as failed
-      const steps = [stepGitCommit, stepGitPush, stepGitScp, stepGitCicd, stepGitVerify];
+      const steps = [stepGitCommit, stepGitPush, stepGitVps, stepGitCicd, stepGitVerify];
       const runningStep = steps.find(s => s && s.classList.contains('step-running'));
       if (runningStep) {
         setStepStatus(runningStep, 'failed');
       } else {
         setStepStatus(stepGitVerify, 'failed');
       }
+      if (gitDeployStatusText) {
+        gitDeployStatusText.textContent = `Deployment failed (exit code ${code}). Check the console for details.`;
+      }
+      if (gitDeployProgressCard) gitDeployProgressCard.classList.remove('is-active');
       showToast(`Deployment pipeline failed with exit code: ${code}`, 'error');
     }
     loadGitStatus();
@@ -1036,26 +1131,18 @@ if (gitDeployForm) {
       return;
     }
 
-    const includeDb = gitIncludeDb ? gitIncludeDb.checked : false;
-
-    // Show and reset stepper
-    if (gitStepper) gitStepper.style.display = 'block';
-    resetStepper();
+    resetGitDeployUI();
 
     try {
       const response = await fetch('/api/git/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commitMessage, project: currentProject, overwriteDb: includeDb })
+        body: JSON.stringify({ commitMessage, project: currentProject })
       });
 
       if (response.ok) {
         showToast('Git push started. Monitoring progress...', 'success');
         gitCommitMessage.value = '';
-        if (gitIncludeDb) {
-          gitIncludeDb.checked = false;
-          if (gitDbWarning) gitDbWarning.style.display = 'none';
-        }
         validateGitForm();
       } else {
         const err = await response.json();
@@ -1072,12 +1159,6 @@ if (gitDeployForm) {
 // Git Deployment form input validation listeners
 if (gitCommitMessage) {
   gitCommitMessage.addEventListener('input', validateGitForm);
-}
-
-if (gitIncludeDb && gitDbWarning) {
-  gitIncludeDb.addEventListener('change', () => {
-    gitDbWarning.style.display = gitIncludeDb.checked ? 'block' : 'none';
-  });
 }
 
 // --- Load Version Parity (local vs remote vs server) ---
@@ -1097,14 +1178,18 @@ async function loadVersionParity() {
   });
 
   try {
-    const response = await fetch(`/api/git/versions?project=${currentProject}`);
+    const response = await fetch(`/api/git/versions?project=${currentProject}&_=${Date.now()}`);
     if (!response.ok) throw new Error('API Error');
     const data = await response.json();
 
     // Update hash displays
-    if (gitVersionLocal) gitVersionLocal.textContent = data.localShort || '—';
+    if (gitVersionLocal) {
+      gitVersionLocal.textContent = (data.localShort || '—') + (data.localDirty ? ' *' : '');
+    }
     if (gitVersionRemote) gitVersionRemote.textContent = data.remoteShort || '—';
-    if (gitVersionServer) gitVersionServer.textContent = data.serverShort || '—';
+    if (gitVersionServer) {
+      gitVersionServer.textContent = (data.serverShort || '—') + (data.serverDirty ? ' *' : '');
+    }
 
     // Update individual match icons
     const checkIcon = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="var(--green)" d="M12 2C6.5 2 2 6.5 2 12S6.5 22 12 22 22 17.5 22 12 17.5 2 12 2M10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z"/></svg>';
@@ -1132,7 +1217,14 @@ async function loadVersionParity() {
     }
 
     // Update parity banner
-    if (data.parity) {
+    if (data.localDirty) {
+      if (gitParityIndicator) gitParityIndicator.style.background = 'var(--yellow)';
+      if (gitParityText) {
+        gitParityText.textContent = 'Local workspace has uncommitted changes — commit to track.';
+        gitParityText.style.color = 'var(--yellow)';
+      }
+      updateGitCicdBanner(data);
+    } else if (data.parity) {
       if (gitParityIndicator) gitParityIndicator.style.background = 'var(--green)';
       if (gitParityText) {
         gitParityText.textContent = 'All three versions match — parity achieved. Server is ready for testing.';
@@ -1141,7 +1233,9 @@ async function loadVersionParity() {
     } else {
       if (gitParityIndicator) gitParityIndicator.style.background = 'var(--yellow)';
       if (gitParityText) {
-        if (!data.remote) {
+        if (data.localAhead) {
+          gitParityText.textContent = 'Local is ahead of remote — push your commits.';
+        } else if (!data.remote) {
           gitParityText.textContent = 'Could not reach GitHub remote. Check network.';
         } else if (!data.server) {
           gitParityText.textContent = 'Could not reach production server. Check SSH/network.';
@@ -1154,6 +1248,8 @@ async function loadVersionParity() {
       }
     }
 
+    updateGitCicdBanner(data);
+
     // Highlight matching boxes
     const allBoxes = [
       document.getElementById('git-version-local-box'),
@@ -1161,35 +1257,12 @@ async function loadVersionParity() {
       document.getElementById('git-version-server-box')
     ];
     allBoxes.forEach(box => {
-      if (box) box.style.borderColor = data.parity ? 'var(--green)' : 'var(--border-subtle)';
+      if (box) box.style.borderColor = data.parity && !data.localDirty ? 'var(--green)' : 'var(--border-subtle)';
     });
-
-    // CI/CD Live status tracking
-    const gitCicdBanner = document.getElementById('git-cicd-status-banner');
-    const gitCicdText = document.getElementById('git-cicd-status-text');
-
-    if (data.remote && data.server && data.remote !== data.server) {
-      if (gitCicdBanner) {
-        gitCicdBanner.style.display = 'flex';
-      }
-      if (gitCicdText) {
-        gitCicdText.textContent = `GitHub Actions CI/CD Pipeline is Active — Deploying commit ${data.remoteShort || '...'} to production server...`;
-      }
-      // Start auto-polling every 8 seconds if not already active
-      if (!gitParityInterval) {
-        gitParityInterval = setInterval(() => {
-          loadVersionParity();
-        }, 8000);
-      }
-    } else {
-      if (gitCicdBanner) {
-        gitCicdBanner.style.display = 'none';
-      }
-      // Clear interval when remote and server commits match (deployment complete)
-      if (gitParityInterval) {
-        clearInterval(gitParityInterval);
-        gitParityInterval = null;
-      }
+    // Local box gets warning border when dirty
+    if (data.localDirty) {
+      const localBox = document.getElementById('git-version-local-box');
+      if (localBox) localBox.style.borderColor = 'var(--yellow)';
     }
 
   } catch (err) {
@@ -1337,10 +1410,6 @@ confirmDeleteBtn.addEventListener('click', async () => {
 
 projectSelect.addEventListener('change', async (e) => {
   currentProject = e.target.value;
-  if (gitParityInterval) {
-    clearInterval(gitParityInterval);
-    gitParityInterval = null;
-  }
   await loadProjectSnapshots(currentProject);
   await loadSettings();
   await loadGitStatus();
@@ -2013,7 +2082,11 @@ let localHealthPollInterval = null;
 function startLocalHealthPolling() {
   stopLocalHealthPolling();
   loadLocalHealth(); // run immediately
-  localHealthPollInterval = setInterval(loadLocalHealth, 6000);
+  loadServerStatus();
+  localHealthPollInterval = setInterval(() => {
+    loadLocalHealth();
+    loadServerStatus();
+  }, 6000);
 }
 
 function stopLocalHealthPolling() {
@@ -2641,6 +2714,108 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
       }
     });
+  }
+});
+
+function formatServerUptime(seconds) {
+  const total = Math.floor(seconds || 0);
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m ${total % 60}s`;
+}
+
+async function loadServerStatus() {
+  const statusDot = document.getElementById('essop-server-status-dot');
+  const statusText = document.getElementById('essop-server-status-text');
+  const pidEl = document.getElementById('essop-server-pid');
+  const uptimeEl = document.getElementById('essop-server-uptime');
+  const endpointEl = document.getElementById('essop-server-endpoint');
+
+  try {
+    const res = await fetch('/api/server/status', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('Status unavailable');
+    const data = await res.json();
+
+    if (statusDot) statusDot.className = 'status-dot dot-running';
+    if (statusText) statusText.textContent = 'Online';
+    if (pidEl) pidEl.textContent = String(data.pid || '—');
+    if (uptimeEl) uptimeEl.textContent = formatServerUptime(data.uptime);
+    if (endpointEl) endpointEl.textContent = `http://localhost:${data.port || 3050}`;
+  } catch (err) {
+    if (statusDot) statusDot.className = 'status-dot';
+    if (statusText) statusText.textContent = 'Unreachable';
+    if (pidEl) pidEl.textContent = '—';
+    if (uptimeEl) uptimeEl.textContent = '—';
+    if (endpointEl) endpointEl.textContent = '—';
+  }
+}
+
+function getRestartServerButtonHtml() {
+  return '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12H4A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z"/></svg> Restart Server';
+}
+
+async function restartEssopServer(restartServerBtn) {
+  if (!confirm('Restart the ESSOP web server? The page will reconnect automatically after the server comes back online.')) return;
+
+  restartServerBtn.disabled = true;
+  restartServerBtn.innerHTML = '<div class="spinner" style="width:14px;height:14px;margin:0 8px 0 0;"></div> Restarting...';
+
+  const statusText = document.getElementById('essop-server-status-text');
+  const statusDot = document.getElementById('essop-server-status-dot');
+  if (statusText) statusText.textContent = 'Restarting...';
+  if (statusDot) statusDot.className = 'status-dot';
+
+  const pollForServer = () => {
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const check = await fetch('/api/server/status', { cache: 'no-cache' });
+        if (check.ok) {
+          clearInterval(poll);
+          window.location.reload();
+          return;
+        }
+      } catch (e) {
+        // Server not up yet
+      }
+      if (attempts >= 60) {
+        clearInterval(poll);
+        showToast('Server did not come back online within 60 seconds.', 'error');
+        restartServerBtn.disabled = false;
+        restartServerBtn.innerHTML = getRestartServerButtonHtml();
+        loadServerStatus();
+      }
+    }, 1000);
+  };
+
+  try {
+    const res = await fetch('/api/server/restart', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Server restarting — page will reload when ready.', 'success');
+      pollForServer();
+    } else {
+      showToast(data.error || 'Server restart failed.', 'error');
+      restartServerBtn.disabled = false;
+      restartServerBtn.innerHTML = getRestartServerButtonHtml();
+      loadServerStatus();
+    }
+  } catch (err) {
+    showToast('Server is restarting — waiting for it to come back...', 'info');
+    pollForServer();
+  }
+}
+
+// --- Restart ESSOP Server Button ---
+document.addEventListener('DOMContentLoaded', () => {
+  const restartServerBtn = document.getElementById('restart-essop-server-btn');
+  if (restartServerBtn) {
+    restartServerBtn.addEventListener('click', () => restartEssopServer(restartServerBtn));
+    loadServerStatus();
   }
 });
 

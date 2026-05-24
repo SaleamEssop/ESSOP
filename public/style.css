@@ -70,17 +70,25 @@ body {
 }
 
 .sidebar-header {
-  padding: 20px 24px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-start;
+  overflow: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
 }
 
 .sidebar-logo-img {
+  display: block;
+  width: 100%;
   max-width: 100%;
   height: auto;
-  display: block;
+  max-height: 80px;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .do-logo {
@@ -1516,6 +1524,76 @@ body {
   font-weight: 700;
   color: var(--color-teal);
   text-shadow: 0 0 8px rgba(0, 210, 196, 0.3);
+}
+
+#git-deploy-progress-card .git-deploy-progress-bar {
+  height: 10px;
+  border-radius: 5px;
+}
+
+#git-deploy-progress-card .progress-percentage-text {
+  font-size: 18px;
+}
+
+#git-deploy-progress-card.is-active {
+  border-color: rgba(14, 165, 233, 0.45);
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.15);
+}
+
+#git-deploy-progress-card.is-active .progress-bar-fill {
+  box-shadow: 0 0 12px rgba(0, 210, 196, 0.35);
+}
+
+.essop-server-card {
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.essop-server-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.essop-server-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .essop-server-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.essop-server-stat {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+}
+
+.essop-server-stat-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.essop-server-stat-value {
+  font-family: var(--font-family-mono);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.essop-server-status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Custom layout overrides for progress display */
