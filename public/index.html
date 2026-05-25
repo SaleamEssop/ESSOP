@@ -667,15 +667,37 @@
                   <textarea id="git-commit-message" placeholder="e.g. Fixed wp-gallery asset port leak issues" rows="3" required></textarea>
                 </div>
 
-                <div class="form-checkboxes" style="margin-bottom: 16px;">
-                  <label class="switch-container">
-                    <input type="checkbox" id="git-include-db">
-                    <span class="switch-slider"></span>
-                    <span class="switch-label-text">
-                      <strong>Include Local Database</strong>
-                      <span class="switch-desc">Dump local MySQL and seed production during deploy (for new site setup).</span>
-                    </span>
-                  </label>
+                <div class="form-group">
+                  <label>Database sync</label>
+                  <div class="form-checkboxes" style="margin-bottom: 12px;">
+                    <label class="switch-container" style="margin-bottom: 8px;">
+                      <input type="radio" name="git-db-mode" id="git-db-mode-none" value="none" checked>
+                      <span class="switch-label-text">
+                        <strong>Code deploy</strong>
+                        <span class="switch-desc">Push plugin/theme changes without touching production database rows.</span>
+                      </span>
+                    </label>
+                    <label class="switch-container" style="margin-bottom: 8px;">
+                      <input type="radio" name="git-db-mode" id="git-db-mode-contractor" value="contractor">
+                      <span class="switch-label-text">
+                        <strong>Single contractor</strong>
+                        <span class="switch-desc">Push one contractor's page content and settings to production.</span>
+                      </span>
+                    </label>
+                    <label class="switch-container">
+                      <input type="radio" name="git-db-mode" id="git-db-mode-full" value="full">
+                      <span class="switch-label-text">
+                        <strong>Full database</strong>
+                        <span class="switch-desc">Replace the entire production database with your local MySQL snapshot.</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div id="git-contractor-picker" class="form-group" style="display: none; margin-bottom: 16px;">
+                  <label for="git-contractor-slug">Contractor page URL or slug</label>
+                  <input type="text" id="git-contractor-slug" placeholder="mypools.co.za/africanpools or africanpools" autocomplete="off" spellcheck="false">
+                  <p class="card-subtitle" style="margin-top: 8px; margin-bottom: 0;">Paste a production URL, local path, or slug — only that contractor's post and meta are synced.</p>
                 </div>
 
                 <div id="git-db-warning" class="alert-box alert-danger git-db-warning" style="display: none; margin-bottom: 16px;">

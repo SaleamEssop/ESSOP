@@ -51,7 +51,9 @@ const gitFilesContainer = document.getElementById('git-files-container');
 const gitDeployForm = document.getElementById('git-deploy-form');
 const gitCommitMessage = document.getElementById('git-commit-message');
 const gitDeployBtn = document.getElementById('git-deploy-btn');
-const gitIncludeDb = document.getElementById('git-include-db');
+const gitDbModeInputs = document.querySelectorAll('input[name="git-db-mode"]');
+const gitContractorPicker = document.getElementById('git-contractor-picker');
+const gitContractorSlug = document.getElementById('git-contractor-slug');
 const gitDbWarning = document.getElementById('git-db-warning');
 const gitDbConfirm = document.getElementById('git-db-confirm');
 const gitStepper = document.getElementById('git-stepper');
@@ -83,6 +85,46 @@ const stepGitCicd   = document.getElementById('step-git-cicd');
 const stepGitVerify = document.getElementById('step-git-verify');
 
 let gitParityInterval = null;
+
+function getGitDbMode() {
+  const selected = document.querySelector('input[name="git-db-mode"]:checked');
+  return selected ? selected.value : 'none';
+}
+
+function updateGitDbModeUI() {
+  const mode = getGitDbMode();
+  if (gitContractorPicker) {
+    gitContractorPicker.style.display = mode === 'contractor' ? 'block' : 'none';
+  }
+  if (gitDbWarning) {
+    gitDbWarning.style.display = mode === 'full' ? 'block' : 'none';
+  }
+  if (mode !== 'full' && gitDbConfirm) {
+    gitDbConfirm.value = '';
+  }
+  validateGitForm();
+}
+
+function parseContractorSlug(raw) {
+  let slug = (raw || '').trim().replace(/\/+$/, '');
+  if (!slug) return '';
+
+  try {
+    if (/^https?:\/\//i.test(slug)) {
+      const url = new URL(slug);
+      slug = url.pathname.replace(/^\/+/, '');
+    }
+  } catch (e) {
+    // Not a full URL — fall through to path parsing.
+  }
+
+  slug = slug.replace(/^\/+/, '');
+  if (slug.includes('/')) {
+    slug = slug.split('/').filter(Boolean).pop() || '';
+  }
+
+  return slug.toLowerCase();
+}
 
 // Overview Tab Metrics (Moved to Health & Parity)
 const overviewDir = document.getElementById('overview-dir');
@@ -756,6 +798,8 @@ async function loadGitStatus() {
     `;
     showToast('Failed to retrieve git status.', 'error');
   }
+
+  updateGitDbModeUI();
 }
 
 // --- Reset Git Deployment progress UI ---
@@ -942,7 +986,8 @@ function updateTaskStatus(task) {
     }
     if (gitRefreshBtn) gitRefreshBtn.disabled = true;
     if (gitCommitMessage) gitCommitMessage.disabled = true;
-    if (gitIncludeDb) gitIncludeDb.disabled = true;
+    gitDbModeInputs.forEach(el => { el.disabled = true; });
+    if (gitContractorSlug) gitContractorSlug.disabled = true;
     if (gitDbConfirm) gitDbConfirm.disabled = true;
     
     // Update sidebar text
@@ -977,7 +1022,8 @@ function updateTaskStatus(task) {
     }
     if (gitRefreshBtn) gitRefreshBtn.disabled = false;
     if (gitCommitMessage) gitCommitMessage.disabled = false;
-    if (gitIncludeDb) gitIncludeDb.disabled = false;
+    gitDbModeInputs.forEach(el => { el.disabled = false; });
+    if (gitContractorSlug) gitContractorSlug.disabled = false;
     if (gitDbConfirm) gitDbConfirm.disabled = false;
 
     // Reset status bars
@@ -1116,9 +1162,10 @@ if (settingsForm) {
 function validateGitForm() {
   if (activeTask.status === 'running') return;
   const commitMsg = gitCommitMessage ? gitCommitMessage.value.trim() : '';
-  const includeDb = gitIncludeDb && gitIncludeDb.checked;
-  const confirmOk = !includeDb || (gitDbConfirm && gitDbConfirm.value.trim().toUpperCase() === 'FULL');
-  const isDisabled = !commitMsg || !confirmOk;
+  const dbMode = getGitDbMode();
+  const confirmOk = dbMode !== 'full' || (gitDbConfirm && gitDbConfirm.value.trim().toUpperCase() === 'FULL');
+  const contractorOk = dbMode !== 'contractor' || parseContractorSlug(gitContractorSlug && gitContractorSlug.value) !== '';
+  const isDisabled = !commitMsg || !confirmOk || !contractorOk;
   if (gitDeployBtn) {
     gitDeployBtn.disabled = isDisabled;
   }
@@ -1140,11 +1187,18 @@ if (gitDeployForm) {
       return;
     }
 
-    const includeDb = gitIncludeDb && gitIncludeDb.checked;
-    if (includeDb) {
+    const dbMode = getGitDbMode();
+    if (dbMode === 'full') {
       const confirmText = gitDbConfirm ? gitDbConfirm.value.trim().toUpperCase() : '';
       if (confirmText !== 'FULL') {
         showToast('Type FULL to confirm database overwrite.', 'warning');
+        return;
+      }
+    }
+    if (dbMode === 'contractor') {
+      const contractorSlug = parseContractorSlug(gitContractorSlug ? gitContractorSlug.value : '');
+      if (!contractorSlug) {
+        showToast('Enter a contractor URL or slug (e.g. mypools.co.za/africanpools).', 'warning');
         return;
       }
     }
@@ -1152,25 +1206,36 @@ if (gitDeployForm) {
     resetGitDeployUI();
 
     try {
+      const payload = {
+        commitMessage,
+        project: currentProject,
+        dbMode
+      };
+      if (dbMode === 'full') {
+        payload.dbConfirm = 'FULL';
+      }
+      if (dbMode === 'contractor' && gitContractorSlug) {
+        payload.contractorSlug = parseContractorSlug(gitContractorSlug.value);
+      }
+
       const response = await fetch('/api/git/push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          commitMessage,
-          project: currentProject,
-          overwriteDb: includeDb,
-          dbConfirm: includeDb ? 'FULL' : undefined
-        })
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
-        showToast(includeDb ? 'Git push with database seed started. Monitoring progress...' : 'Git push started. Monitoring progress...', 'success');
+        const toastMsg = dbMode === 'full'
+          ? 'Git push with database seed started. Monitoring progress...'
+          : dbMode === 'contractor'
+            ? 'Git push with contractor sync started. Monitoring progress...'
+            : 'Git push started. Monitoring progress...';
+        showToast(toastMsg, 'success');
         gitCommitMessage.value = '';
-        if (gitIncludeDb) {
-          gitIncludeDb.checked = false;
-          if (gitDbWarning) gitDbWarning.style.display = 'none';
-        }
-        if (gitDbConfirm) gitDbConfirm.value = '';
+        const noneMode = document.getElementById('git-db-mode-none');
+        if (noneMode) noneMode.checked = true;
+        updateGitDbModeUI();
+        if (gitContractorSlug) gitContractorSlug.value = '';
         validateGitForm();
       } else {
         const err = await response.json();
@@ -1188,16 +1253,13 @@ if (gitDeployForm) {
 if (gitCommitMessage) {
   gitCommitMessage.addEventListener('input', validateGitForm);
 }
-if (gitIncludeDb) {
-  gitIncludeDb.addEventListener('change', () => {
-    if (gitDbWarning) {
-      gitDbWarning.style.display = gitIncludeDb.checked ? 'block' : 'none';
-    }
-    if (!gitIncludeDb.checked && gitDbConfirm) {
-      gitDbConfirm.value = '';
-    }
-    validateGitForm();
+if (gitDbModeInputs.length) {
+  gitDbModeInputs.forEach(input => {
+    input.addEventListener('change', updateGitDbModeUI);
   });
+}
+if (gitContractorSlug) {
+  gitContractorSlug.addEventListener('input', validateGitForm);
 }
 if (gitDbConfirm) {
   gitDbConfirm.addEventListener('input', validateGitForm);

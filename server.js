@@ -205,6 +205,26 @@ function getWordPressUrlFromDb(mysqlContainer, dbUser, dbPassword, dbName) {
   });
 }
 
+function normalizeContractorSlug(raw) {
+  let slug = String(raw || '').trim().replace(/\/+$/, '');
+  if (!slug) return '';
+
+  try {
+    if (/^https?:\/\//i.test(slug)) {
+      const url = new URL(slug);
+      slug = url.pathname.replace(/^\/+/, '');
+    }
+  } catch (e) {}
+
+  slug = slug.replace(/^\/+/, '');
+  if (slug.includes('/')) {
+    const parts = slug.split('/').filter(Boolean);
+    slug = parts[parts.length - 1] || '';
+  }
+
+  return slug.toLowerCase();
+}
+
 // Helper to fetch URL following redirects and preserving local port mappings
 async function fetchWithRedirects(targetUrl, options = {}, maxRedirects = 3) {
   let currentUrl = targetUrl;
@@ -1754,7 +1774,7 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
-        const { commitMessage, project, overwriteDb, dbConfirm } = payload;
+        const { commitMessage, project, overwriteDb, dbConfirm, contractorSlug, dbMode } = payload;
 
         const activeProject = project || 'mypools';
         const projectPath = getProjectPath(activeProject);
@@ -1764,18 +1784,34 @@ const server = http.createServer((req, res) => {
           return;
         }
 
+        const mode = dbMode || (overwriteDb ? 'full' : 'none');
+        if (!['none', 'full', 'contractor'].includes(mode)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid dbMode. Use none, full, or contractor.' }));
+          return;
+        }
+
         const args = [];
         if (commitMessage) {
           args.push('-CommitMessage', commitMessage);
         }
         args.push('-SourcePath', projectPath);
-        if (overwriteDb) {
+
+        if (mode === 'full') {
           if (dbConfirm !== 'FULL') {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Database overwrite requires typing FULL to confirm' }));
             return;
           }
           args.push('-OverwriteDatabase');
+        } else if (mode === 'contractor') {
+          const slug = normalizeContractorSlug(contractorSlug);
+          if (!slug) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Enter a contractor URL or slug (e.g. mypools.co.za/africanpools)' }));
+            return;
+          }
+          args.push('-ContractorSlug', slug);
         }
 
         runPowerShellScript('Deploy-Git.ps1', args);
